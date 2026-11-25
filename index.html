@@ -33,9 +33,9 @@
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14.5px; line-height: 1.45; margin: 0;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 22px 48px }
 .wrap { max-width: 1360px; margin: 0 auto; display: grid; gap: 14px }
-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; padding-bottom: 4px }
+header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 8px 0 4px }
 h1 { font-family: var(--f-serif); font-weight: 600; font-size: 1.75rem; margin: 0; letter-spacing: -0.005em }
-.sub { color: var(--muted); margin: 6px 0 0; max-width: 70ch }
+.sub { color: var(--muted); margin: 8px auto 0; max-width: 72ch }
 .paper { margin: 2px 0 0; font-size: 13.5px; color: var(--muted) }
 .paper a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px }
 .paper a:hover { color: var(--ink); text-decoration-color: currentColor }
@@ -47,11 +47,12 @@ h2 { font-weight: 600; font-size: 0.95rem; margin: 0; color: var(--ink) }
 .seg button:disabled { opacity: 0.45; cursor: default }
 .seg.small button { padding: 3px 8px; font-size: 12.5px }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--c); outline-offset: 2px }
-.pickers { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
-.grid { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(270px, 320px); gap: 14px; align-items: start }
-.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start }
+.pickers { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center }
+.grid { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(270px, 320px); gap: 14px; align-items: stretch }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; display: grid; gap: 9px; align-content: start }
-.stack { display: grid; gap: 14px; min-width: 0 }
+.stack { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.stack > .panel:last-child { flex: 1 }
 canvas { display: block; max-width: 100% }
 .fieldwrap { position: relative; width: 100%; max-width: 620px; margin: 0 auto }
 #field { width: 100%; aspect-ratio: 1 / 1; cursor: crosshair; touch-action: none; border: 1px solid var(--line) }
@@ -111,7 +112,14 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 #summary tbody tr { cursor: pointer }
 #summary tbody tr:hover { background: var(--soft) }
 #summary tr.cur td:first-child { box-shadow: inset 3px 0 0 var(--hl) }
-.about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px }
+.about { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch }
+.about .systems { grid-column: 1 / -1 }
+.syscols { columns: 3 300px; column-gap: 28px }
+.syscols p { break-inside: avoid; max-width: none }
+@media (max-width: 720px) { .about { grid-template-columns: minmax(0, 1fr) } }
+.about .panel { align-content: start; gap: 0 }
+.foot { text-align: center; color: var(--muted); font-size: 12.5px; padding: 4px 0 18px }
+.foot a { color: inherit; text-underline-offset: 2px }
 .about p { margin: 0 0 8px; max-width: 65ch }
 .about h3 { font-family: var(--f-serif); font-weight: 600; font-size: 1.05rem; margin: 0 0 6px }
 .math { font-family: var(--f-serif); font-style: italic; font-size: 1.04em }
@@ -290,30 +298,32 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
     <p class="hint">A network can fit its training data almost perfectly and still be far from equivariant: where the data do not constrain it, nothing pushes it towards ℰ. Compare the networks of one system: the same loss, trained on part or all of the symmetric domain. Defects are for each system's default group. Fit is accuracy for classifiers and relative error for regressions. <span id="sum-spiral">The spiral's label-smoothed loss cannot go below 0.199, and even with full coverage the spiral keeps a sizeable defect: the labels only fix the sign of the logit, not its size away from the boundary.</span> Equivariant nets have zero defect for their own group at every stage, so only their loss is drawn. Click a row to open it.</p>
   </section>
 
-  <section class="panel about">
-    <div>
+  <div class="about">
+    <section class="panel">
       <h3>What you are looking at</h3>
       <p>Each system is a trained network <span class="math">f<sub>θ</sub></span> on the plane. A symmetry group <span class="math">G</span> of rotations acts on the inputs, and on the outputs when they are vectors. The Reynolds projector <span class="math">P<sub>ℰ</sub></span> averages <span class="math">f</span> over <span class="math">G</span>, projecting onto the equivariant subspace <span class="math">ℰ</span>: a 64-point quadrature for <span class="math">SO(2)</span>, an exact average over the <span class="math">n</span> rotations for <span class="math">C<sub>n</sub></span>. The equivariance defect is <span class="math">δ = f − P<sub>ℰ</sub>f</span>.</p>
       <p>The orbit direction <span class="math">η<sub>ξ</sub> = dΠ(ξ)f</span>, for the rotation generator <span class="math">ξ</span>, rotates the function infinitesimally. It is orthogonal to <span class="math">δ</span>, so moving along it changes where the function points, not how symmetric it is.</p>
-    </div>
-    <div>
+      <p>The <b>coefficient plot</b> shows <span class="math">|c*ᵢ|</span> against <span class="math">|b*ᵢ|</span> for every parameter, in the gauge chosen for the lift. In the normalised gauge the norm minimised is <span class="math">Σ S<sub>i</sub>² c<sub>i</sub>²</span>, so a parameter with a small sensitivity can carry a large coefficient.</p>
+    </section>
+    <section class="panel">
       <h3>The two directions</h3>
       <p><span class="math">c* = J<sup>+</sup>η</span> and <span class="math">b* = J<sup>+</sup>(−δ)</span>. <span class="math">J</span> is the Jacobian of the outputs on a polar probe with respect to the parameters. <span class="math">J<sup>+</sup></span> is truncated at <span class="math">σ<sub>k</sub> ≥ 10<sup>−3</sup>σ<sub>1</sub></span>, and the minimum norm is taken in the sensitivity-normalised gauge (or plain ℓ2, by the switch). The lift residual is the part of the target the parameters cannot reach locally.</p>
       <p><b>Resolved</b> walks recompute <span class="math">J</span> and the direction at every Euler step; <b>Fixed</b> walks reuse the one from <span class="math">t = 0</span>. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
       <p>The <b>training stage</b> switch loads checkpoints of the same run, at initialisation and after 2% and 10% of training, so you can compare how well the lifts work before and after training. The <b>training loss</b> readout is each network's objective on a sample from its training distribution; it shows what a walk costs the fit. The <b>trace</b> under the walk plots the defect, the training loss, the fit (accuracy or error, over the whole domain and where trained), or the walk as a path in the loss–defect plane.</p>
-      <p>The <b>coefficient plot</b> shows <span class="math">|c*ᵢ|</span> against <span class="math">|b*ᵢ|</span> for every parameter, in the gauge chosen for the lift. In the normalised gauge the norm minimised is <span class="math">Σ S<sub>i</sub>² c<sub>i</sub>²</span>, so a parameter with a small sensitivity can carry a large coefficient.</p>
-    </div>
-    <div>
+    </section>
+    <section class="panel systems">
       <h3>Systems</h3>
+      <div class="syscols">
       <p><b>Annulus classifier</b>: an MLP (width 32, depth 3, SiLU) separating a disc (<span class="math">r &lt; 0.4</span>) from an annulus (<span class="math">0.6 &lt; r &lt; 1</span>), trained on a 90° wedge or on all angles. Probe: 15 radii × 32 angles.</p>
       <p><b>Mexican hat</b>: the potential network of an ASRNN trained on trajectories of <span class="math">H = ½‖p‖² + ½α‖q‖² + ¼‖q‖⁴</span>. The field is the learned force <span class="math">−∇<sub>q</sub>V</span>. Here the lift uses 8 radii × 32 angles at the displayed α only (the paper pools rows across α).</p>
+      <p><b>Six-fold potential</b>: the same MLP regressing <span class="math">V = r⁴ − 1.2r² + 0.25r⁶cos 6φ</span>, trained on a 120° wedge or on the whole disc. Choose <span class="math">C₂, C₃, C₆</span> or <span class="math">SO(2)</span> as the target symmetry. Probe: 15 radii × 48 angles, closed under every <span class="math">C<sub>n</sub></span> used.</p>
       <p><b>Spiral classifier</b>: the same MLP separating the two classes of a three-arm spiral, <span class="math">sign sin 3(φ − 2r)</span> for <span class="math">0.15 ≤ r ≤ 1</span>, trained on a 120° wedge or on the whole disc. The labels have <span class="math">C₃</span> symmetry only: averaging over <span class="math">C₆</span> or <span class="math">SO(2)</span> mixes the two classes, so choosing those groups shows what the lift does when the target symmetry is wrong. Probe: 15 radii × 48 angles.</p>
       <p><b>Two-body</b>: the relative coordinate <span class="math">q</span> of two bodies under softened gravity, <span class="math">V = −1/√(‖q‖² + 0.09)</span>. The same MLP learns <span class="math">V</span> by matching the force <span class="math">−∇V</span> at positions observed along orbits: three half orbits that all start on the <span class="math">+x</span> axis, or 24 full orbits spread round the circle. Both reach a small training loss, but only the second data set pins down a rotation-invariant potential, so the first converges with a large <span class="math">SO(2)</span> defect. Probe: 15 radii × 32 angles.</p>
-      <p><b>Six-fold potential</b>: the same MLP regressing <span class="math">V = r⁴ − 1.2r² + 0.25r⁶cos 6φ</span>, trained on a 120° wedge or on the whole disc. Choose <span class="math">C₂, C₃, C₆</span> or <span class="math">SO(2)</span> as the target symmetry. Probe: 15 radii × 48 angles, closed under every <span class="math">C<sub>n</sub></span> used.</p>
       <p><b>Equivariant nets</b>: each system with a restricted training set also has a network with the symmetry built in: the same MLP, fed only group-invariant inputs (<span class="math">x² + y²</span> for <span class="math">SO(2)</span>; <span class="math">r, cos nφ, sin nφ</span> for <span class="math">C<sub>n</sub></span>), trained on the same restricted data with the same loss. For its own group <span class="math">δ</span> and <span class="math">η</span> are zero whatever the weights, so there is nothing to lift; choose a larger group to compare.</p>
-      <p class="hint">Method from <a href="https://arxiv.org/abs/2608.24700" target="_blank" rel="noopener"><i>Parameter-Level Attribution of Symmetry in Trained Networks</i></a> (NeurReps 2026, arXiv:2608.24700). Everything is computed live in your browser, in float64.</p>
-    </div>
-  </section>
+      </div>
+    </section>
+  </div>
+  <footer class="foot">Method from <a href="https://arxiv.org/abs/2608.24700" target="_blank" rel="noopener"><i>Parameter-Level Attribution of Symmetry in Trained Networks</i></a> (NeurReps 2026, arXiv:2608.24700). Everything is computed live in your browser, in float64.</footer>
 </div>
 
 <script src="core.js"></script>
