@@ -73,6 +73,11 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var
 .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
 .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px }
 .ro .k { color: var(--muted); font-size: 12.5px; line-height: 1.25 }
+.ro[title] { cursor: help }
+kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--soft) }
+@media (hover: none) { .keys { display: none } }
+.ro[title] .k { text-decoration: underline dotted var(--line); text-underline-offset: 3px }
+.ro.on .k { color: var(--ink) }
 .ro .v { font-family: var(--f-mono); font-size: 1.12rem; font-variant-numeric: tabular-nums }
 .ro .v small { font-size: 0.72rem; color: var(--muted) }
 .ladder { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums }
@@ -234,14 +239,15 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <section class="panel">
         <h2>Readouts</h2>
         <div class="readouts">
-          <div class="ro"><div class="k" id="ro-defect-k">defect ‖δ‖ / ‖f‖</div><div class="v" id="ro-defect">–</div></div>
-          <div class="ro"><div class="k">moved ‖θ − θ₀‖ / ‖θ₀‖</div><div class="v" id="ro-dist">–</div></div>
-          <div class="ro"><div class="k" id="ro-s1-k">–</div><div class="v" id="ro-s1">–</div></div>
-          <div class="ro" id="ro-s2-box"><div class="k" id="ro-s2-k">–</div><div class="v" id="ro-s2">–</div></div>
-          <div class="ro"><div class="k" id="ro-loss-k">training loss</div><div class="v" id="ro-loss">–</div></div>
-          <div class="ro"><div class="k" title="‖Jc* − η‖/‖η‖ and ‖Jb* + δ‖/‖δ‖: the part of each target outside the resolved tangent space">relative residual, c* / b*</div><div class="v" id="ro-res">–</div></div>
-          <div class="ro"><div class="k">resolved rank of J</div><div class="v" id="ro-rank">–</div></div>
+          <div class="ro" title="How far the network is from equivariant: the size of δ = f − P_ℰ f relative to f, on the probe, for the chosen group G. 0 means exactly equivariant."><div class="k" id="ro-defect-k">defect ‖δ‖ / ‖f‖</div><div class="v" id="ro-defect">–</div></div>
+          <div class="ro" title="How far the weights have moved from the trained (or loaded) network, relative to the size of the weights."><div class="k">moved ‖θ − θ₀‖ / ‖θ₀‖</div><div class="v" id="ro-dist">–</div></div>
+          <div class="ro" title="How well the network does over the whole domain, including where it was not trained: accuracy for classifiers, relative error against the true field for regressions."><div class="k" id="ro-s1-k">–</div><div class="v" id="ro-s1">–</div></div>
+          <div class="ro" id="ro-s2-box" title="The same score on the region the network was trained on."><div class="k" id="ro-s2-k">–</div><div class="v" id="ro-s2">–</div></div>
+          <div class="ro" title="The network's own training objective, evaluated on a sample from its training data."><div class="k" id="ro-loss-k">training loss</div><div class="v" id="ro-loss">–</div></div>
+          <div class="ro" title="‖Jc* − η‖/‖η‖ and ‖Jb* + δ‖/‖δ‖: the part of each target the parameters cannot reach locally. Near 0: the network can rotate (c*) or symmetrise (b*) itself to first order."><div class="k">relative residual, c* / b*</div><div class="v" id="ro-res">–</div></div>
+          <div class="ro" title="How many directions in function space the parameters can move the outputs locally: singular values of J above 10⁻³ of the largest."><div class="k">resolved rank of J</div><div class="v" id="ro-rank">–</div></div>
         </div>
+        <p class="hint" id="ro-help">Hover or tap a readout to see what it measures.</p>
         <div id="ladder-box" hidden>
           <div class="lbl" style="margin:4px 0">defect for each symmetry group</div>
           <div class="ladder" id="ladder"></div>
@@ -256,6 +262,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
           <button class="btn" id="w-stop" disabled>Stop</button>
         </div>
         <div class="row"><button class="btn" id="w-compare" title="From the trained weights, run a Fixed walk and then a Resolved walk in the chosen direction, and overlay both in the trace (as in the paper's figures)">Resolved vs Fixed</button><span class="hint">from the trained weights, to the t in the settings</span></div>
+        <p class="hint keys">Keys: <kbd>W</kbd> walk · <kbd>R</kbd> restore · <kbd>Esc</kbd> stop · <kbd>C</kbd> / <kbd>B</kbd> direction · <kbd>0</kbd> reset weights</p>
         <div class="status" id="status"></div>
         <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true">equivariance defect</button><button id="tr-loss" aria-pressed="false">training loss</button><button id="tr-fit" aria-pressed="false" title="Accuracy (classifiers) or error against the true field (regressions) along the walk: solid over the whole domain, dotted on the training region">fit</button><button id="tr-plane" aria-pressed="false" title="Each walk as a path in the plane of equivariance defect (across) and training loss (up): the start is the hollow circle">loss vs defect</button></div></div>
         <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
@@ -1225,6 +1232,16 @@ function updateInspector() {
 function changed() { S.version++; S.hist = []; markDirty(true); requestAttribSoon(); }
 
 function bind() {
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input, select, textarea")) return;
+    const k = e.key.toLowerCase(), click = (id) => { const b = $(id); if (b && !b.disabled) { b.click(); e.preventDefault(); } };
+    if (k === "w") click("w-go"); else if (k === "r") click("w-restore"); else if (k === "escape") click("w-stop");
+    else if (k === "c") click("w-c"); else if (k === "b") click("w-b"); else if (k === "0") click("reset");
+  });
+  for (const ro of document.querySelectorAll(".ro[title]")) {
+    const show = () => { $("ro-help").textContent = ro.title; for (const o of document.querySelectorAll(".ro")) o.classList.toggle("on", o === ro); };
+    ro.addEventListener("click", show); ro.addEventListener("mouseenter", show);
+  }
   for (const f of Object.keys(FAMS)) $("fam-" + f).onclick = () => setSystem(FAMS[f].keys[0]);
   for (const v of ["f", "pe", "delta"]) $("v-" + v).onclick = () => { S.view = v; for (const u of ["f", "pe", "delta"]) $("v-" + u).setAttribute("aria-pressed", u === v); markDirty(); };
   for (const m of ["weight", "sens", "c", "b"]) $("cm-" + m).onclick = () => { S.cmode = m; for (const u of ["weight", "sens", "c", "b"]) $("cm-" + u).setAttribute("aria-pressed", u === m); markDirty(true); };
@@ -1317,26 +1334,40 @@ const TRY = {
   twobody_orbits: "Compare with <b>3 half orbits</b>: about the same training loss, but a defect 200 times smaller. Then <b>Add noise</b> to a group and restore it.",
 };
 const FAM_NAME = { annulus: "Annulus classifier", mexican: "Mexican hat", sixfold: "Six-fold potential", spiral: "Spiral classifier", twobody: "Two-body" };
-function buildSummary() {
-  const keep = { key: S.key, net: S.net, sys: S.sys, theta: S.theta, score: SCORE }, rows = [];
-  for (const f of Object.keys(FAMS)) for (const k of FAMS[f].keys) {
-    const cfg = SYS[k]; S.key = k; S.net = C.makeNet(S.weights[k]); S.theta = S.net.theta;
+// rows are computed lazily (only the systems on show), one per timer tick, and cached
+const SUMROW = {};
+function summaryRow(k) {
+  const keep = { key: S.key, net: S.net, sys: S.sys, theta: S.theta, score: SCORE }, cfg = SYS[k], f = cfg.fam;
+  try {
+    S.key = k; S.net = C.makeNet(S.weights[k]); S.theta = S.net.theta;
     S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
     makeScoreSets();
-    const g = cfg.group ?? cfg.groups[0], [s1, s2] = scores();
-    const hist = [];
+    const g = cfg.group ?? cfg.groups[0], [s1, s2] = scores(), hist = [];
     for (const [st] of STAGES) {
       const wk = st === "trained" ? k : k + "@" + st; if (!S.weights[wk]) continue;
       S.net = C.makeNet(S.weights[wk]); S.theta = S.net.theta; S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
       hist.push({ st, loss: lossOf(S.theta), defect: stateFor(S.theta, g, false).defect });
     }
     const fin = hist[hist.length - 1];
-    rows.push({ k, f, g, label: cfg.trained || cfg.label || (f === "mexican" ? "trajectories" : ""), eq: !!cfg.eq, loss: fin.loss, s1, s2, defect: fin.defect, hist });
+    return { k, f, g, label: cfg.trained || cfg.label || (f === "mexican" ? "trajectories" : ""), eq: !!cfg.eq, loss: fin.loss, s1, s2, defect: fin.defect, hist };
+  } finally { S.key = keep.key; S.net = keep.net; S.sys = keep.sys; S.theta = keep.theta; SCORE = keep.score; }
+}
+const rowHTML = (r) => `<td>${FAM_NAME[r.f]}${r.eq ? ' <small class="eqtag">equivariant net</small>' : ""}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.defect < 1e-9 ? "≈ 0" : fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td>${spark(r.hist)}</td>`;
+function buildSummary() {
+  const body = $("summary").tBodies[0]; body.innerHTML = "";
+  for (const f of Object.keys(FAMS)) for (const k of FAMS[f].keys) {
+    const tr = body.insertRow(); tr.dataset.k = k; tr.dataset.f = f;
+    tr.innerHTML = `<td>${FAM_NAME[f]}${SYS[k].eq ? ' <small class="eqtag">equivariant net</small>' : ""}</td><td>${SYS[k].trained || SYS[k].label || ""}</td><td class="n hint" colspan="5">computing…</td>`;
+    tr.onclick = () => { if (S.walking) return; setSystem(k); window.scrollTo({ top: 0, behavior: "smooth" }); };
   }
-  S.key = keep.key; S.net = keep.net; S.sys = keep.sys; S.theta = keep.theta; SCORE = keep.score;
-  $("summary").tBodies[0].innerHTML = rows.map((r) => `<tr data-k="${r.k}" data-f="${r.f}"><td>${FAM_NAME[r.f]}${r.eq ? ' <small class="eqtag">equivariant net</small>' : ""}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.defect < 1e-9 ? "≈ 0" : fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td>${spark(r.hist)}</td></tr>`).join("");
-  for (const tr of $("summary").tBodies[0].rows) tr.onclick = () => { if (S.walking) return; setSystem(tr.dataset.k); window.scrollTo({ top: 0, behavior: "smooth" }); };
   markSummary();
+}
+let sumTimer = 0;
+function fillSummary() {
+  clearTimeout(sumTimer);
+  const tr = [...$("summary").tBodies[0].rows].find((r) => !r.hidden && !SUMROW[r.dataset.k]);
+  if (!tr) return;
+  sumTimer = setTimeout(() => { const k = tr.dataset.k; SUMROW[k] = summaryRow(k); tr.innerHTML = rowHTML(SUMROW[k]); fillSummary(); }, 0);
 }
 // loss (dashed) and defect (solid) across the saved training stages, each on its own log scale
 function spark(hist) {
@@ -1352,6 +1383,7 @@ function markSummary() {
   const all = $("sum-all").checked, fam = SYS[S.key].fam;
   $("sum-spiral").hidden = !all && fam !== "spiral";
   for (const tr of $("summary").tBodies[0].rows) { tr.classList.toggle("cur", tr.dataset.k === S.key); if (tr.dataset.f) tr.hidden = !all && tr.dataset.f !== fam; }
+  fillSummary();
 }
 
 // ------------------------------------------------------------------ boot
