@@ -219,11 +219,11 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <div class="row between">
         <div class="legend"><span id="lg-name" style="font-family:var(--f-serif);font-style:italic;font-size:13px;color:var(--ink)"></span><span id="lg-lo">–</span><canvas id="lg-bar" width="150" height="8"></canvas><span id="lg-hi">–</span></div>
         <div class="row">
-          <label class="check" for="colour-style">colours <select id="colour-style" aria-label="Colour style">
-            <option value="auto">as in the paper</option><option value="class">class fills</option><option value="heat">coolwarm heatmap</option><option value="potential">viridis + contours</option></select></label>
-          <label class="check" id="data-label"><input type="checkbox" id="show-data" checked> training data</label>
-          <label class="check" title="Keep the colour scale of the trained network while it changes"><input type="checkbox" id="lock-scale" checked> fixed scale</label>
-          <label class="check"><input type="checkbox" id="show-probe"> probe</label>
+          <label class="check" for="colour-style" title="How the field is coloured. Paper style: class fills for classifiers, viridis with contours for potentials">colour map <select id="colour-style" aria-label="Colour map">
+            <option value="auto">paper style</option><option value="class">class fills</option><option value="heat">coolwarm heatmap</option><option value="potential">viridis + contours</option></select></label>
+          <label class="check" id="data-label"><input type="checkbox" id="show-data" checked> show training data</label>
+          <label class="check" title="Keep the colour range of the starting network during a walk, so changes in the field stay visible; untick to rescale the colours to the current field"><input type="checkbox" id="lock-scale" checked> keep colour range fixed</label>
+          <label class="check" title="Show the polar grid of points where δ, η and the Jacobian J are evaluated"><input type="checkbox" id="show-probe"> show probe points</label>
         </div>
       </div>
       <div class="row" id="alpha-row" hidden>
@@ -239,7 +239,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         <h2>Readouts</h2>
         <div class="readouts">
           <div class="ro" title="How far the network is from equivariant: the size of δ = f − P_ℰ f relative to f, on the probe, for the chosen group G. 0 means exactly equivariant."><div class="k" id="ro-defect-k">defect ‖δ‖ / ‖f‖</div><div class="v" id="ro-defect">–</div></div>
-          <div class="ro" title="How far the weights have moved from the trained (or loaded) network, relative to the size of the weights."><div class="k">moved ‖θ − θ₀‖ / ‖θ₀‖</div><div class="v" id="ro-dist">–</div></div>
+          <div class="ro" title="How far the weights are from where they started (the network as loaded, θ₀), relative to the size of the weights. 0 before any walk or perturbation; Reset sets it back to 0."><div class="k">weight change from start ‖θ − θ₀‖ / ‖θ₀‖</div><div class="v" id="ro-dist">–</div></div>
           <div class="ro" title="How well the network does over the whole domain, including where it was not trained: accuracy for classifiers, relative error against the true field for regressions."><div class="k" id="ro-s1-k">–</div><div class="v" id="ro-s1">–</div></div>
           <div class="ro" id="ro-s2-box" title="The same score on the region the network was trained on."><div class="k" id="ro-s2-k">–</div><div class="v" id="ro-s2">–</div></div>
           <div class="ro" title="The network's own training objective, evaluated on a sample from its training data."><div class="k" id="ro-loss-k">training loss</div><div class="v" id="ro-loss">–</div></div>
