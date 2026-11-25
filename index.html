@@ -6,88 +6,102 @@
 <meta name="description" content="Walk a trained network's weights along the symmetry orbit or towards the symmetric functions and watch its output field change.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,600;1,8..60,400&display=swap">
 <style>
-/* Layout: instrument bench. Network and parameter groups on the left, the field large in the middle, readouts and walks on the right. */
+/* Paper-figure look: white plotting surfaces, coolwarm / viridis maps, Okabe-Ito accents (c* blue, b* green, group amber). */
 :root {
-  --bg: #f3f4f6; --panel: #ffffff; --ink: #172026; --muted: #5b6770; --line: #d9dde2;
-  --accent: #2f4fd6; --accent-soft: #e4e9fb;
-  --neg: #12707e; --mid: #f7f5f0; --pos: #b4532a; --seq0: #f7f5f0; --seq1: #29365f;
-  --good: #2b7a4b; --warn: #a0620c;
-  --f-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
-  --f-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --bg: #f6f6f4; --panel: #ffffff; --ink: #1b1d22; --muted: #646a73; --line: #e3e3df; --soft: #f1f1ee;
+  --c: #0072b2; --b: #009e73; --hl: #e69f00;
+  --cls-neg: #ececfa; --cls-pos: #fbebea; --pt-neg: #2747d4; --pt-pos: #d62728;
+  --good: #2b7a4b; --warn: #b8730a;
+  --f-serif: "Source Serif 4", Georgia, serif;
+  --f-body: "Source Sans 3", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "Source Code Pro", ui-monospace, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0f1418; --panel: #171e24; --ink: #e6eaee; --muted: #93a0aa; --line: #2a343c;
-  --accent: #8da2ff; --accent-soft: #232c4a;
-  --neg: #3fb3c2; --mid: #1b2228; --pos: #e58a5c; --seq0: #1b2228; --seq1: #c9d3ff;
+  --bg: #111316; --panel: #181b1f; --ink: #e8eaed; --muted: #9aa1aa; --line: #2b2f35; --soft: #20242a;
+  --c: #56b4e9; --b: #3cc79f; --hl: #f0b429;
+  --cls-neg: #23263b; --cls-pos: #3a2628; --pt-neg: #6f8bff; --pt-pos: #ff6b6b;
   --good: #5fc48a; --warn: #e0a548; color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0f1418; --panel: #171e24; --ink: #e6eaee; --muted: #93a0aa; --line: #2a343c;
-  --accent: #8da2ff; --accent-soft: #232c4a;
-  --neg: #3fb3c2; --mid: #1b2228; --pos: #e58a5c; --seq0: #1b2228; --seq1: #c9d3ff;
+  --bg: #111316; --panel: #181b1f; --ink: #e8eaed; --muted: #9aa1aa; --line: #2b2f35; --soft: #20242a;
+  --c: #56b4e9; --b: #3cc79f; --hl: #f0b429;
+  --cls-neg: #23263b; --cls-pos: #3a2628; --pt-neg: #6f8bff; --pt-pos: #ff6b6b;
   --good: #5fc48a; --warn: #e0a548; color-scheme: dark }
 * { box-sizing: border-box }
 [hidden] { display: none !important }
-body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px }
-.wrap { max-width: 1340px; margin: 0 auto; display: grid; gap: 16px }
-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px }
-h1 { font-family: var(--f-display); font-weight: 600; font-size: 1.6rem; margin: 0; letter-spacing: -0.01em }
-.sub { color: var(--muted); margin: 2px 0 0; max-width: 72ch }
-h2 { font-family: var(--f-display); font-weight: 500; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 }
-.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel) }
-.seg button { font: inherit; border: 0; background: transparent; color: var(--ink); padding: 7px 12px; cursor: pointer; border-right: 1px solid var(--line) }
-.seg button:last-child { border-right: 0 }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel) }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14.5px; line-height: 1.45; margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 22px 48px }
+.wrap { max-width: 1360px; margin: 0 auto; display: grid; gap: 14px }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; padding-bottom: 4px }
+h1 { font-family: var(--f-serif); font-weight: 600; font-size: 1.75rem; margin: 0; letter-spacing: -0.005em }
+.sub { color: var(--muted); margin: 4px 0 0; max-width: 70ch }
+h2 { font-weight: 600; font-size: 0.95rem; margin: 0; color: var(--ink) }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; background: var(--soft); border-radius: 8px; padding: 2px; gap: 2px }
+.seg button { font: inherit; font-size: 13.5px; border: 0; background: transparent; color: var(--muted); padding: 5px 11px; cursor: pointer; border-radius: 6px }
+.seg button:hover { color: var(--ink) }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,0.06); font-weight: 500 }
 .seg button:disabled { opacity: 0.45; cursor: default }
-.seg.small button { padding: 4px 9px; font-size: 12.5px }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.seg.small button { padding: 3px 8px; font-size: 12.5px }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--c); outline-offset: 2px }
 .pickers { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
-.grid { display: grid; grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(270px, 330px); gap: 16px; align-items: start }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; display: grid; gap: 8px; align-content: start }
-.stack { display: grid; gap: 16px; min-width: 0 }
+.grid { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(270px, 320px); gap: 14px; align-items: start }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; display: grid; gap: 9px; align-content: start }
+.stack { display: grid; gap: 14px; min-width: 0 }
 canvas { display: block; max-width: 100% }
-.fieldwrap { position: relative; width: 100%; max-width: 600px; margin: 0 auto }
-#field { width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; cursor: crosshair; touch-action: none }
-#hover-ro { position: absolute; left: 8px; top: 8px; font-family: var(--f-mono); font-size: 11.5px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; pointer-events: none; font-variant-numeric: tabular-nums }
-#net { width: 100%; height: 380px; cursor: pointer }
+.fieldwrap { position: relative; width: 100%; max-width: 620px; margin: 0 auto }
+#field { width: 100%; aspect-ratio: 1 / 1; cursor: crosshair; touch-action: none; border: 1px solid var(--line) }
+#hover-ro { position: absolute; left: 8px; top: 8px; font-family: var(--f-mono); font-size: 11.5px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; pointer-events: none; font-variant-numeric: tabular-nums }
+#net { width: 100%; height: 330px; cursor: pointer }
+#coef { width: 100%; height: 300px; cursor: crosshair }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .between { justify-content: space-between }
-label, .lbl { color: var(--muted); font-size: 12.5px }
-.check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12.5px; cursor: pointer }
-.check input { accent-color: var(--accent) }
-input[type="range"] { width: 100%; accent-color: var(--accent) }
-select { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink) }
-.btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 6px 11px; cursor: pointer }
-.btn.primary { background: var(--accent); color: var(--panel); border-color: var(--accent) }
-.btn:disabled { opacity: 0.5; cursor: default }
+label, .lbl { color: var(--muted); font-size: 13px }
+.check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer }
+.check input { accent-color: var(--ink) }
+input[type="range"] { width: 100%; accent-color: var(--ink) }
+select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink) }
+.btn { font: inherit; font-size: 13.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 12px; cursor: pointer }
+.btn:hover:not(:disabled) { border-color: var(--muted) }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink) }
+.btn:disabled { opacity: 0.45; cursor: default }
 .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
 .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px }
-.ro .k { color: var(--muted); font-size: 12px }
-.ro .v { font-family: var(--f-mono); font-size: 1.1rem; font-variant-numeric: tabular-nums }
+.ro .k { color: var(--muted); font-size: 12.5px; line-height: 1.25 }
+.ro .v { font-family: var(--f-mono); font-size: 1.12rem; font-variant-numeric: tabular-nums }
 .ro .v small { font-size: 0.72rem; color: var(--muted) }
 .ladder { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums }
-.ladder .bar { height: 8px; border-radius: 4px; background: var(--accent-soft); position: relative; overflow: hidden }
-.ladder .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px }
-.ladder .sel { color: var(--accent); font-weight: 500 }
+.ladder .bar { height: 6px; border-radius: 3px; background: var(--soft); position: relative; overflow: hidden }
+.ladder .bar i { position: absolute; inset: 0 auto 0 0; background: var(--b); border-radius: 3px }
+.ladder .sel { color: var(--ink); font-weight: 500 }
 .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--f-mono) }
-.legend canvas { height: 10px; width: 140px; border-radius: 3px }
-.hint { color: var(--muted); font-size: 12.5px; margin: 0 }
-.name { font-family: var(--f-mono); font-size: 12.5px }
-.sep { border-top: 1px solid var(--line); margin: 4px 0 }
+.legend canvas { height: 8px; width: 150px; border-radius: 2px }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0; line-height: 1.4 }
+.name { font-size: 13px }
+.sep { border-top: 1px solid var(--line); margin: 3px 0 }
 .status { font-size: 12.5px; color: var(--muted); min-height: 1.4em }
-.status.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 6px; animation: pulse 1s infinite }
+.status.busy::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-right: 6px; animation: pulse 1s infinite }
 @keyframes pulse { 50% { opacity: 0.25 } }
 @media (prefers-reduced-motion: reduce) { .status.busy::before { animation: none } }
 svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
-.about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px }
+details.adv { border-top: 1px solid var(--line); padding-top: 8px }
+details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; list-style: none; display: flex; align-items: center; gap: 6px }
+details.adv summary::-webkit-details-marker { display: none }
+details.adv summary::before { content: "›"; display: inline-block; transition: transform 0.15s; font-size: 15px; line-height: 1 }
+details.adv[open] summary::before { transform: rotate(90deg) }
+details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
+.chips { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted) }
+.chips span { display: inline-flex; align-items: center; gap: 5px }
+.chips i { width: 8px; height: 8px; border-radius: 50%; display: inline-block }
+.chips i.hollow { background: transparent !important; border: 1.5px solid currentColor }
+.about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px }
 .about p { margin: 0 0 8px; max-width: 65ch }
-.about h3 { font-family: var(--f-display); font-weight: 500; font-size: 1rem; margin: 0 0 6px }
-.math { font-family: var(--f-mono); font-size: 0.92em }
+.about h3 { font-family: var(--f-serif); font-weight: 600; font-size: 1.05rem; margin: 0 0 6px }
+.math { font-family: var(--f-serif); font-style: italic; font-size: 1.04em }
+.math sub, .math sup { font-style: normal }
 @media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) } .center { grid-column: 1 / -1; order: -1 } }
-@media (max-width: 720px) { .grid { grid-template-columns: minmax(0, 1fr) } #net { height: 300px } }
+@media (max-width: 720px) { .grid, .grid2 { grid-template-columns: minmax(0, 1fr) } #net { height: 280px } }
 </style>
 </head>
 <body>
@@ -109,7 +123,7 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
   </header>
 
   <div class="grid">
-    <!-- left: network and parameter groups -->
+    <!-- left: network and parameters -->
     <div class="stack">
       <section class="panel">
         <div class="row between"><h2>Network</h2>
@@ -126,11 +140,11 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
 
       <section class="panel" id="groups">
         <h2>Perturb parameters</h2>
-        <div class="name" id="sel-name">One parameter: click an edge or a unit.</div>
+        <div class="name" id="sel-name">Click an edge, a unit or a point in the coefficient plot to pick one parameter.</div>
         <div class="row between" id="sel-row" hidden><span class="lbl">value</span><span class="num" id="sel-val">–</span></div>
         <input type="range" id="sel-slider" min="-1" max="1" step="0.001" value="0" disabled aria-label="Selected parameter value">
         <div class="sep"></div>
-        <div class="row between"><label for="grp-rule">Parameter group</label>
+        <div class="row between"><label for="grp-rule">Group</label>
           <select id="grp-rule">
             <option value="topb">top k by |b*ᵢ|</option>
             <option value="topc">top k by |c*ᵢ|</option>
@@ -141,13 +155,13 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
         <div id="k-row"><div class="row between"><label for="grp-k">k</label><span class="num" id="grp-k-val">40</span></div>
           <input type="range" id="grp-k" min="0" max="1000" step="1" value="500"></div>
         <div class="hint" id="grp-info">–</div>
-        <label class="check"><input type="checkbox" id="grp-show" checked> highlight on the network</label>
+        <label class="check"><input type="checkbox" id="grp-show" checked> highlight the group</label>
         <div class="row between"><label for="kick-size">kick size, % of ‖θ‖</label><span class="num" id="kick-val">1.0%</span></div>
         <input type="range" id="kick-size" min="0.1" max="5" step="0.1" value="1">
         <div class="row">
           <button class="btn" id="grp-kick" title="Add Gaussian noise to the group only">Kick group</button>
           <button class="btn" id="grp-zero" title="Set every parameter in the group to zero">Zero group</button>
-          <button class="btn" id="reset">Reset to trained</button>
+          <button class="btn" id="reset">Reset</button>
         </div>
       </section>
     </div>
@@ -170,10 +184,11 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
         <div id="hover-ro" hidden></div>
       </div>
       <div class="row between">
-        <div class="legend"><span id="lg-lo">–</span><canvas id="lg-bar" width="140" height="10"></canvas><span id="lg-hi">–</span></div>
+        <div class="legend"><span id="lg-name" style="font-family:var(--f-serif);font-style:italic;font-size:13px;color:var(--ink)"></span><span id="lg-lo">–</span><canvas id="lg-bar" width="150" height="8"></canvas><span id="lg-hi">–</span></div>
         <div class="row">
-          <label class="check"><input type="checkbox" id="lock-scale" checked> lock colours to the trained network</label>
-          <label class="check"><input type="checkbox" id="show-probe"> show probe</label>
+          <label class="check" id="data-label"><input type="checkbox" id="show-data" checked> training data</label>
+          <label class="check"><input type="checkbox" id="lock-scale" checked> lock colours</label>
+          <label class="check"><input type="checkbox" id="show-probe"> probe</label>
         </div>
       </div>
       <div class="row" id="alpha-row" hidden>
@@ -182,7 +197,7 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
       <p class="hint" id="field-hint"></p>
     </section>
 
-    <!-- right: readouts, profile, walk -->
+    <!-- right: readouts and walk -->
     <div class="stack">
       <section class="panel">
         <h2>Readouts</h2>
@@ -200,36 +215,46 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
         </div>
       </section>
       <section class="panel">
-        <div class="row between"><h2 id="prof-title">Angular profile of δ</h2><span class="num" id="r0-val" style="font-size:12px;color:var(--muted)">r = 0.50</span></div>
-        <svg id="profile" viewBox="0 0 300 170" width="100%" role="img" aria-label="Defect against angle at a fixed radius"></svg>
-        <input type="range" id="r0" min="0.1" max="1" step="0.01" value="0.5" aria-label="Profile radius">
-        <p class="hint">Solid: the walk so far, from dark (start) to orange (latest). Dotted: the ideal function-space flow at the latest t.</p>
-      </section>
-      <section class="panel">
         <h2>Walk in parameter space</h2>
-        <div class="row">
-          <div class="seg small" role="group" aria-label="Direction"><button id="w-c" aria-pressed="false">along c*</button><button id="w-b" aria-pressed="true">along b*</button></div>
-          <div class="seg small" role="group" aria-label="Mode"><button id="m-res" aria-pressed="true">resolved</button><button id="m-fix" aria-pressed="false">fixed</button></div>
-        </div>
-        <div class="row">
-          <div class="seg small" role="group" aria-label="Free parameters"><button id="free-all" aria-pressed="true">all parameters free</button><button id="free-grp" aria-pressed="false">only the group</button></div>
-          <div class="seg small" role="group" aria-label="Gauge"><button id="g-norm" aria-pressed="true" title="Minimise the sensitivity-weighted norm, as in the paper">normalised</button><button id="g-raw" aria-pressed="false" title="Plain minimum-ℓ2-norm lift">raw ℓ2</button></div>
-        </div>
-        <div class="row between"><label for="wT">run to t =</label><span class="num" id="wT-val">1.0</span></div>
-        <input type="range" id="wT" min="0.2" max="8" step="0.1" value="1">
-        <div class="row between"><label for="w-dt">Euler step Δt</label>
-          <select id="w-dt"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option></select></div>
+        <div class="seg" role="group" aria-label="Direction"><button id="w-c" aria-pressed="false">along c*</button><button id="w-b" aria-pressed="true">along b*</button></div>
         <div class="row">
           <button class="btn primary" id="w-go">Walk</button>
           <button class="btn" id="w-restore" title="Resolved b* with all parameters free, in the normalised gauge, with a step-size check, until the defect is 1% of where it started">Restore symmetry</button>
           <button class="btn" id="w-stop" disabled>Stop</button>
-          <button class="btn" id="w-clear">Clear runs</button>
         </div>
-        <p class="hint" id="gauge-hint"></p>
         <div class="status" id="status"></div>
         <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
+        <details class="adv">
+          <summary>Walk settings</summary>
+          <div class="inner">
+            <div class="row between"><span class="lbl">direction</span><div class="seg small" role="group" aria-label="Mode"><button id="m-res" aria-pressed="true">resolved</button><button id="m-fix" aria-pressed="false">fixed</button></div></div>
+            <div class="row between"><span class="lbl">free</span><div class="seg small" role="group" aria-label="Free parameters"><button id="free-all" aria-pressed="true">all</button><button id="free-grp" aria-pressed="false">only the group</button></div></div>
+            <div class="row between"><span class="lbl">gauge</span><div class="seg small" role="group" aria-label="Gauge"><button id="g-norm" aria-pressed="true" title="Minimise the sensitivity-weighted norm, as in the paper">normalised</button><button id="g-raw" aria-pressed="false" title="Plain minimum-ℓ2-norm lift">raw ℓ2</button></div></div>
+            <div class="row between"><label for="wT">run to t =</label><span class="num" id="wT-val">1.0</span></div>
+            <input type="range" id="wT" min="0.2" max="8" step="0.1" value="1">
+            <div class="row between"><label for="w-dt">Euler step Δt</label>
+              <select id="w-dt"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option></select></div>
+            <p class="hint" id="gauge-hint"></p>
+            <div><button class="btn" id="w-clear">Clear runs</button></div>
+          </div>
+        </details>
       </section>
     </div>
+  </div>
+
+  <div class="grid2">
+    <section class="panel">
+      <div class="row between"><h2 id="prof-title">Angular profile of δ</h2><span class="num" id="r0-val" style="font-size:12px;color:var(--muted)">r = 0.50</span></div>
+      <svg id="profile" viewBox="0 0 460 210" width="100%" role="img" aria-label="Defect against angle at a fixed radius"></svg>
+      <input type="range" id="r0" min="0.1" max="1" step="0.01" value="0.5" aria-label="Profile radius">
+      <p class="hint">δ around the amber circle in the field. Solid lines: the walk, coloured from blue (start) to red (latest). Dashed: the ideal flow at the latest t, a rotation for c* and e<sup>−t</sup>δ for b*.</p>
+    </section>
+    <section class="panel">
+      <div class="row between"><h2>Lift coefficients by parameter</h2><span class="hint" id="coef-gauge"></span></div>
+      <canvas id="coef" aria-label="Scatter of |c*_i| against |b*_i| for every parameter, coloured by layer"></canvas>
+      <div class="chips" id="coef-legend"></div>
+      <p class="hint" id="coef-ro">Each point is one parameter. Points far right carry the rotation; points high up carry the move towards symmetry. Hover to name a point, click to pick it.</p>
+    </section>
   </div>
 
   <section class="panel about">
@@ -259,7 +284,7 @@ svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
 const C = window.SymCore;
 const $ = (id) => document.getElementById(id);
 const E = 1.15;   // display half-width
-const G = 80;     // heatmap resolution
+const G = 96;     // heatmap resolution
 const SUB = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
 const gName = (n) => (n === 0 ? "SO(2)" : "C" + SUB[n]);
 const tgtC6 = (x, y) => { const r2 = x * x + y * y, p = Math.atan2(y, x); return r2 * r2 - 1.2 * r2 + 0.25 * r2 * r2 * r2 * Math.cos(6 * p); };
@@ -269,23 +294,24 @@ const FAMS = {
   mexican: { keys: ["mexican_hat"] },
   sixfold: { keys: ["c6_wedge120", "c6_wedge360"] },
 };
+// style: "class" = pale class fills + coolwarm contours + black boundary; "potential" = viridis + white contours
 const SYS = {
   annulus_wedge90: { fam: "annulus", hash: "annulus-90", label: "90° wedge", kind: "scalar", wedge: 90, probe: [15, 32], groups: [0], gauge: "norm",
-    inputs: ["x", "y"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", seq: false },
+    inputs: ["x", "y"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", style: "class" },
   annulus_wedge360: { fam: "annulus", hash: "annulus-360", label: "all angles", kind: "scalar", wedge: 360, probe: [15, 32], groups: [0], gauge: "norm",
-    inputs: ["x", "y"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", seq: false },
+    inputs: ["x", "y"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", style: "class" },
   mexican_hat: { fam: "mexican", hash: "mexican-hat", label: "", kind: "force", probe: [8, 32], groups: [0], gauge: "norm",
-    inputs: ["q₁", "q₂", "α"], out: "V", r0: 0.8, title: "Learned potential V and force −∇V", circles: [1], score: "force", seq: true },
+    inputs: ["q₁", "q₂", "α"], out: "V", r0: 0.8, title: "Learned potential V and force −∇V", circles: [1], score: "force", style: "potential" },
   c6_wedge120: { fam: "sixfold", hash: "sixfold-120", label: "120° wedge", kind: "scalar", wedge: 120, probe: [15, 48], groups: [2, 3, 6, 0], group: 6, gauge: "raw",
-    inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", seq: false },
+    inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", style: "potential" },
   c6_wedge360: { fam: "sixfold", hash: "sixfold-360", label: "whole disc", kind: "scalar", wedge: 360, probe: [15, 48], groups: [2, 3, 6, 0], group: 6, gauge: "raw",
-    inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", seq: false },
+    inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", style: "potential" },
 };
 const S = {
   key: null, weights: null, net: null, sys: null, theta0: null, theta: null, alpha: -0.5, group: 0,
   view: "f", cmode: "weight", sel: -1, attrib: null, attribFor: -1, version: 0, grpAttrib: null, grpFor: "",
   which: "b", mode: "resolved", free: "all", gauge: "norm", T: 1, dt: 0.1, walking: false, stop: false,
-  hist: [], runs: [], base: null, profBase: null, r0: 0.5, hover: -1, lock: true, probe: false,
+  hist: [], runs: [], base: null, profBase: null, r0: 0.5, hover: -1, lock: true, probe: false, data: true, coefHover: -1,
 };
 let worker = null, liftId = 0;
 const pending = new Map();
@@ -293,17 +319,24 @@ const pending = new Map();
 // ------------------------------------------------------------------ colours
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 function hexRgb(h) { h = h.replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+// matplotlib "coolwarm" (Moreland) and "viridis", sampled at nine stops
+const COOLWARM = [[59, 76, 192], [98, 130, 234], [141, 176, 254], [184, 208, 249], [221, 221, 221], [245, 196, 173], [244, 154, 123], [222, 96, 77], [180, 4, 38]];
+const VIRIDIS = [[68, 1, 84], [71, 44, 122], [59, 81, 139], [44, 113, 142], [33, 144, 141], [39, 173, 129], [92, 200, 99], [170, 220, 50], [253, 231, 37]];
+// layer colours as in the paper's attribution scatter (tab10 picks)
+const LAYER_COLS = ["#1f77b4", "#d62728", "#e377c2", "#17becf", "#ff7f0e", "#2ca02c"];
+const ramp = (stops, u) => { u = Math.max(0, Math.min(1, u)) * (stops.length - 1); const i = Math.min(stops.length - 2, Math.floor(u)), w = u - i, a = stops[i], b = stops[i + 1]; return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w]; };
+const coolwarm = (u) => ramp(COOLWARM, u);           // u in [0, 1]
+const diverge = (v) => ramp(COOLWARM, 0.5 + 0.5 * v); // v in [-1, 1]
+const viridis = (u) => ramp(VIRIDIS, u);
 let PAL = null;
 function readPalette() {
-  PAL = { neg: hexRgb(cssVar("--neg")), mid: hexRgb(cssVar("--mid")), pos: hexRgb(cssVar("--pos")), s0: hexRgb(cssVar("--seq0")), s1: hexRgb(cssVar("--seq1")),
-    ink: cssVar("--ink"), muted: cssVar("--muted"), line: cssVar("--line"), accent: cssVar("--accent"), panel: cssVar("--panel"), posH: cssVar("--pos"), negH: cssVar("--neg") };
+  PAL = { ink: cssVar("--ink"), muted: cssVar("--muted"), line: cssVar("--line"), panel: cssVar("--panel"), soft: cssVar("--soft"),
+    c: cssVar("--c"), b: cssVar("--b"), hl: cssVar("--hl"), clsNeg: hexRgb(cssVar("--cls-neg")), clsPos: hexRgb(cssVar("--cls-pos")),
+    ptNeg: cssVar("--pt-neg"), ptPos: cssVar("--pt-pos"), dark: hexRgb(cssVar("--panel"))[0] < 100 };
 }
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const diverge = (u) => { u = Math.max(-1, Math.min(1, u)); return u < 0 ? lerp(PAL.mid, PAL.neg, Math.pow(-u, 0.8)) : lerp(PAL.mid, PAL.pos, Math.pow(u, 0.8)); };
-const sequential = (u) => lerp(PAL.s0, PAL.s1, Math.max(0, Math.min(1, u)));
 const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 const fmt = (v) => { if (!isFinite(v)) return "–"; const a = Math.abs(v); return (a !== 0 && (a < 1e-2 || a >= 1e3) ? v.toExponential(1) : v.toFixed(a < 1 ? 3 : 1)).replace("-", "−"); };
-
 // ------------------------------------------------------------------ system set-up
 function setSystem(key, fromHash) {
   if (S.walking) return;
@@ -324,14 +357,18 @@ function setSystem(key, fromHash) {
   const isV = cfg.out === "V";
   $("v-f").textContent = cfg.out; $("v-pe").innerHTML = `P<sub>G</sub> ${cfg.out}`; $("v-delta").innerHTML = `δ = ${cfg.out} − P<sub>G</sub> ${cfg.out}`;
   $("field-hint").textContent = {
-    annulus: (cfg.wedge < 360 ? "Shaded sector: the 90° wedge the classifier was trained on. " : "") + "Black line: decision boundary f = 0. Dashed circles: r = 0.4, 0.6, 1. Blue dotted circle: the profile radius.",
-    mexican: "Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc, r ≤ 1. Blue dotted circle: the profile radius.",
-    sixfold: (cfg.wedge < 360 ? "Shaded sector: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Blue dotted circle: the profile radius.",
+    annulus: "Fill: predicted class. Black line: decision boundary f = 0; thin lines: contours of f, blue below zero and red above. " + (cfg.wedge < 360 ? "Points: training data, all inside the 90° wedge. " : "Points: training data. ") + "Amber circle: the profile radius.",
+    mexican: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc. Amber circle: the profile radius.",
+    sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Amber circle: the profile radius.",
   }[cfg.fam];
   $("ro-s1-k").textContent = { acc: "accuracy, all angles", force: "force error vs true", fit: "error vs true V, whole disc" }[cfg.score];
   $("ro-s2-k").textContent = { acc: "accuracy, training wedge", fit: "error vs true V, training wedge", force: "" }[cfg.score];
   $("ro-s2-box").hidden = cfg.score === "force" || cfg.wedge === 360;
   $("ladder-box").hidden = cfg.groups.length < 2;
+  $("data-label").hidden = cfg.fam !== "annulus";
+  S.pInfo = Array.from({ length: S.net.P }, (_, i) => paramWhere(i));
+  const L = S.net.offs.length;
+  $("coef-legend").innerHTML = S.net.offs.map((_, l) => `<span style="color:${LAYER_COLS[l % LAYER_COLS.length]}"><i style="background:currentColor"></i><i class="hollow"></i><span style="color:var(--muted)">${l === L - 1 ? "readout" : "layer " + (l + 1)}</span></span>`).join("") + `<span>filled: weights · hollow: biases</span>`;
   setGauge(cfg.gauge, true);
   makeScoreSets();
   computeBase();
@@ -416,73 +453,108 @@ function sizeCanvas(cv, h) {
   return { w, h: hh, dpr };
 }
 function drawField(d) {
-  const cfg = SYS[S.key], b = S.lock ? S.base : d;
+  const cfg = SYS[S.key], b = S.lock ? S.base : d, style = S.view === "delta" ? "delta" : cfg.style;
   const img = off.getContext("2d").createImageData(G, G);
+  const vSpan = b.vMax - b.vMin || 1;
   for (let n = 0; n < G * G; n++) {
-    const v = d.val[n], m = d.pe[n];
-    let col;
-    if (S.view === "delta") col = diverge((v - m) / (b.dMax || 1));
-    else { const q = S.view === "pe" ? m : v; col = cfg.seq ? sequential((q - b.vMin) / (b.vMax - b.vMin || 1)) : diverge(q / (b.fMax || 1)); }
+    const v = d.val[n], m = d.pe[n], q = S.view === "pe" ? m : v;
+    const col = style === "delta" ? diverge((v - m) / (b.dMax || 1)) : style === "class" ? (q < 0 ? PAL.clsNeg : PAL.clsPos) : viridis((q - b.vMin) / vSpan);
     img.data[4 * n] = col[0]; img.data[4 * n + 1] = col[1]; img.data[4 * n + 2] = col[2]; img.data[4 * n + 3] = 255;
   }
   off.getContext("2d").putImageData(img, 0, 0);
-  const div = S.view === "delta" || !cfg.seq;
-  drawLegend(S.view === "delta" ? -b.dMax : cfg.seq ? b.vMin : -b.fMax, S.view === "delta" ? b.dMax : cfg.seq ? b.vMax : b.fMax, div);
+  const o = cfg.out;
+  if (style === "delta") drawLegend(-b.dMax, b.dMax, "cw", `δ`);
+  else if (style === "class") drawLegend(-b.fMax, b.fMax, "cw", `${o}`);
+  else drawLegend(0, b.vMax - b.vMin, "vi", `${o} − min ${o}`);
 
   const { w, dpr } = sizeCanvas(fieldCv), ctx = fieldCv.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
   ctx.drawImage(off, 0, 0, w, w);
   const X = (x) => ((x + E) / (2 * E)) * w, Y = (y) => ((E - y) / (2 * E)) * w, R = (r) => (r / (2 * E)) * w;
-  const ink = hexRgb(PAL.ink);
+  const F = S.view === "pe" ? d.pe : d.val, onDark = style === "potential" || PAL.dark;
+  const guide = onDark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.38)";
+  // contours
+  if (style === "class") {
+    for (let i = -7; i <= 7; i++) {
+      if (!i) continue;
+      ctx.beginPath(); contourPath(ctx, F, w, (b.fMax * i) / 8);
+      ctx.strokeStyle = rgb(diverge(i / 7 * 0.95)); ctx.globalAlpha = 0.85; ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.beginPath(); contourPath(ctx, F, w, 0); ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2; ctx.stroke();
+  } else if (style === "potential") {
+    ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 0.8;
+    for (let i = 1; i < 12; i++) { ctx.beginPath(); contourPath(ctx, F, w, b.vMin + (vSpan * i) / 12); ctx.stroke(); }
+  } else {
+    ctx.beginPath(); contourPath(ctx, d.val.map((v, n) => v - d.pe[n]), w, 0); ctx.strokeStyle = rgb(hexRgb(PAL.ink), 0.35); ctx.lineWidth = 0.8; ctx.stroke();
+  }
+  // potentials are only meaningful on the probe disc: fade the corners
+  if (style === "potential" || (style === "delta" && cfg.style === "potential")) {
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w, w); ctx.arc(X(0), Y(0), R(1.02), 0, 2 * Math.PI, true);
+    ctx.fillStyle = PAL.panel; ctx.globalAlpha = 0.9; ctx.fill("evenodd"); ctx.restore();
+  }
+  // training wedge
   if (cfg.wedge && cfg.wedge < 360) {
     const a = (cfg.wedge * Math.PI) / 180;
-    ctx.fillStyle = rgb(ink, 0.08); ctx.strokeStyle = rgb(ink, 0.4); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.arc(X(0), Y(0), R(1), 0, -a, true); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = guide; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(1.12), Y(0)); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(1.12 * Math.cos(a)), Y(1.12 * Math.sin(a))); ctx.stroke();
   }
-  ctx.setLineDash([4, 4]); ctx.strokeStyle = rgb(ink, 0.45); ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = guide; ctx.lineWidth = 1;
   cfg.circles.forEach((r) => { ctx.beginPath(); ctx.arc(X(0), Y(0), R(r), 0, 2 * Math.PI); ctx.stroke(); });
-  ctx.setLineDash([2, 3]); ctx.strokeStyle = PAL.accent; ctx.globalAlpha = 0.8;
+  ctx.setLineDash([]); ctx.strokeStyle = PAL.hl; ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.arc(X(0), Y(0), R(S.r0), 0, 2 * Math.PI); ctx.stroke();
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
-  if (cfg.fam === "annulus" && S.view !== "delta") contour(ctx, S.view === "pe" ? d.pe : d.val, w);
+  // training data, as in the paper's decision-boundary figures
+  if (cfg.fam === "annulus" && S.data && SCORE) {
+    const pts = SCORE.wedge.slice(0, 220);
+    ctx.lineWidth = 0.9; ctx.strokeStyle = "rgba(0,0,0,0.85)";
+    for (const [x, y, lab] of pts) {
+      const px = X(x), py = Y(y);
+      if (lab === 0) { ctx.fillStyle = PAL.ptNeg; ctx.beginPath(); ctx.arc(px, py, 3.2, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }
+      else {
+        const s = 3.2; ctx.lineCap = "round";
+        ctx.strokeStyle = "rgba(0,0,0,0.85)"; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(px - s, py - s); ctx.lineTo(px + s, py + s); ctx.moveTo(px - s, py + s); ctx.lineTo(px + s, py - s); ctx.stroke();
+        ctx.strokeStyle = PAL.ptPos; ctx.lineWidth = 1.8; ctx.stroke(); ctx.lineWidth = 0.9; ctx.strokeStyle = "rgba(0,0,0,0.85)"; ctx.lineCap = "butt";
+      }
+    }
+  }
   if (S.probe) {
-    const [nR, nA] = cfg.probe; ctx.fillStyle = rgb(ink, 0.55);
+    const [nR, nA] = cfg.probe; ctx.fillStyle = onDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
     for (let i = 1; i <= nR; i++) for (let j = 0; j < nA; j++) { const r = i / nR, a = (2 * Math.PI * j) / nA; ctx.fillRect(X(r * Math.cos(a)) - 1, Y(r * Math.sin(a)) - 1, 2, 2); }
   }
   if (d.arrows) {
     const sc = (0.85 / 15) * w, useD = S.view === "delta", mx = useD ? b.qdMax : b.qMax;
-    ctx.strokeStyle = PAL.ink; ctx.fillStyle = PAL.ink; ctx.lineWidth = 1.2;
+    const onCw = style === "delta" && !PAL.dark;
     for (const a of d.arrows) {
       const vx = useD ? a.dx : a.fx, vy = useD ? a.dy : a.fy, m = Math.hypot(vx, vy);
       if (m < 1e-12) continue;
       const len = Math.min(1.6, m / (mx || 1)) * sc, ux = vx / m, uy = vy / m, x0 = X(a.x), y0 = Y(a.y), x1 = x0 + ux * len, y1 = y0 - uy * len;
-      ctx.globalAlpha = 0.35 + 0.6 * Math.min(1, m / (mx || 1));
-      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
       const hl = Math.min(5, len * 0.4);
-      ctx.beginPath(); ctx.moveTo(x1, y1);
-      ctx.lineTo(x1 - hl * (ux * 0.9 - uy * 0.5), y1 + hl * (uy * 0.9 + ux * 0.5));
-      ctx.lineTo(x1 - hl * (ux * 0.9 + uy * 0.5), y1 + hl * (uy * 0.9 - ux * 0.5)); ctx.closePath(); ctx.fill();
+      const head = () => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - hl * (ux * 0.9 - uy * 0.5), y1 + hl * (uy * 0.9 + ux * 0.5)); ctx.lineTo(x1 - hl * (ux * 0.9 + uy * 0.5), y1 + hl * (uy * 0.9 - ux * 0.5)); ctx.closePath(); };
+      ctx.globalAlpha = 0.4 + 0.6 * Math.min(1, m / (mx || 1));
+      if (!onCw) { ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 2.8; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); head(); ctx.stroke(); }
+      ctx.strokeStyle = onCw ? PAL.ink : "#fff"; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); head(); ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
   S.lastDisplay = d;
 }
-function contour(ctx, F, w) {
-  const cell = w / G; ctx.strokeStyle = PAL.ink; ctx.lineWidth = 1.8; ctx.beginPath();
-  const at = (i, j) => F[j * G + i];
+// marching squares: adds the level set {F = lev} to the current path
+function contourPath(ctx, F, w, lev) {
+  const cell = w / G, at = (i, j) => F[j * G + i] - lev;
   for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
-    const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)], pts = [];
-    const P = [[i + 0.5, j + 0.5], [i + 1.5, j + 0.5], [i + 1.5, j + 1.5], [i + 0.5, j + 1.5]];
+    const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
+    if ((v[0] > 0) === (v[1] > 0) && (v[1] > 0) === (v[2] > 0) && (v[2] > 0) === (v[3] > 0)) continue;
+    const P = [[i + 0.5, j + 0.5], [i + 1.5, j + 0.5], [i + 1.5, j + 1.5], [i + 0.5, j + 1.5]], pts = [];
     const edge = (a, b) => { if ((v[a] > 0) !== (v[b] > 0)) { const t = v[a] / (v[a] - v[b]); pts.push([P[a][0] + (P[b][0] - P[a][0]) * t, P[a][1] + (P[b][1] - P[a][1]) * t]); } };
     edge(0, 1); edge(1, 2); edge(2, 3); edge(3, 0);
     for (let k = 0; k + 1 < pts.length; k += 2) { ctx.moveTo(pts[k][0] * cell, pts[k][1] * cell); ctx.lineTo(pts[k + 1][0] * cell, pts[k + 1][1] * cell); }
   }
-  ctx.stroke();
 }
-function drawLegend(lo, hi, div) {
+function drawLegend(lo, hi, kind, name) {
+  $("lg-name").textContent = name || "";
   const cv = $("lg-bar"), ctx = cv.getContext("2d");
-  for (let i = 0; i < cv.width; i++) { const u = i / (cv.width - 1); ctx.fillStyle = rgb(div ? diverge(2 * u - 1) : sequential(u)); ctx.fillRect(i, 0, 1, cv.height); }
+  for (let i = 0; i < cv.width; i++) { const u = i / (cv.width - 1); ctx.fillStyle = rgb(kind === "vi" ? viridis(u) : coolwarm(u)); ctx.fillRect(i, 0, 1, cv.height); }
   $("lg-lo").textContent = fmt(lo); $("lg-hi").textContent = fmt(hi);
 }
 
@@ -493,7 +565,7 @@ function profileAt(th, av) {
   return out;
 }
 function drawProfile(cur) {
-  const svg = $("profile"), W = 300, H = 170, l = 40, r = 8, t = 8, bt = 22;
+  const svg = $("profile"), W = 460, H = 210, l = 46, r = 8, t = 8, bt = 22;
   if (!S.profBase || S.profBase.r0 !== S.r0 || S.profBase.alpha !== S.alpha || S.profBase.group !== S.group) {
     const p0 = profileAt(S.theta0, averager(S.theta0));
     S.profBase = { r0: S.r0, alpha: S.alpha, group: S.group, amp: Math.max(1e-12, ...p0.map(Math.abs)) };
@@ -511,12 +583,12 @@ function drawProfile(cur) {
     const tEnd = S.hist[S.hist.length - 1].t || 1, stride = Math.max(1, Math.ceil(S.hist.length / 24));
     S.hist.forEach((h, i) => {
       const last = i === S.hist.length - 1; if (!last && i % stride) return;
-      s += `<path d="${path(h.prof)}" fill="none" stroke="${rgb(lerp(PAL.s1, PAL.pos, h.t / tEnd))}" stroke-width="${last ? 1.9 : 1}" opacity="${last ? 1 : 0.5}"/>`;
+      s += `<path d="${path(h.prof)}" fill="none" stroke="${rgb(coolwarm(h.t / tEnd))}" stroke-width="${last ? 2 : 1.1}" opacity="${last ? 1 : 0.75}"/>`;
     });
     const last = S.hist[S.hist.length - 1], p0 = S.hist[0].prof, n = p0.length - 1;
     const ideal = S.hist.which === "b" ? p0.map((v) => v * Math.exp(-last.t))
       : p0.map((_, k) => { let u = (k / n - last.t / (2 * Math.PI)) * n; u = ((u % n) + n) % n; const i = Math.floor(u), w = u - i; return p0[i] * (1 - w) + p0[Math.min(n, i + 1)] * w; });
-    s += `<path d="${path(ideal)}" fill="none" stroke="${PAL.ink}" stroke-width="1.4" stroke-dasharray="1.5 3"/>`;
+    s += `<path d="${path(ideal)}" fill="none" stroke="${PAL.ink}" stroke-width="1.3" stroke-dasharray="5 4"/>`;
   }
   svg.innerHTML = s;
 }
@@ -536,7 +608,7 @@ function drawTrace() {
   s += `<text x="${W - r}" y="${H - 6}" text-anchor="end">t = ${tMax.toFixed(1)}</text><text x="${l}" y="${H - 6}">0</text>`;
   s += `<text x="${l - 4}" y="${t + 8}" text-anchor="end">${fmt(logy ? Math.pow(10, y1) : y1)}</text><text x="${l - 4}" y="${H - bt}" text-anchor="end">${logy ? fmt(Math.pow(10, y0)) : "0"}</text>`;
   runs.forEach((rn, i) => {
-    const col = rn.which === "c" ? PAL.accent : PAL.posH, dash = rn.mode === "fixed" ? "5 3" : "";
+    const col = rn.which === "c" ? PAL.c : PAL.b, dash = rn.mode === "fixed" ? "5 3" : "";
     s += `<path d="${rn.pts.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="${dash}" opacity="${i === runs.length - 1 ? 1 : 0.6}"/>`;
     s += `<text x="${l + 6}" y="${t + 10 + 12 * i}" style="fill:${col}">${rn.label}</text>`;
   });
@@ -598,7 +670,7 @@ function drawNet() {
   else if (S.attrib) { const src = S.cmode === "sens" ? S.attrib.sens : S.cmode === "c" ? S.attrib.c : S.attrib.b; vals = new Float64Array(P); for (let i = 0; i < P; i++) vals[i] = Math.abs(src[i]); }
   const mask = $("grp-show").checked ? groupMask() : null;
   let gmax = 0; if (vals && !isW) for (let i = 0; i < P; i++) gmax = Math.max(gmax, vals[i]);
-  const posC = hexRgb(PAL.posH), negC = hexRgb(PAL.negH), accC = hexRgb(PAL.accent), mutC = hexRgb(PAL.muted), panC = hexRgb(PAL.panel);
+  const posC = COOLWARM[8], negC = COOLWARM[0], accC = hexRgb(S.cmode === "c" ? PAL.c : S.cmode === "b" ? PAL.b : PAL.ink), hlC = hexRgb(PAL.hl), mutC = hexRgb(PAL.muted), panC = hexRgb(PAL.panel);
   offs.forEach((o, l) => {
     let lmax = 0; if (isW) for (let k = 0; k < o.o * o.i; k++) lmax = Math.max(lmax, Math.abs(S.theta[o.wOff + k]));
     const order = []; for (let k = 0; k < o.o * o.i; k++) order.push(o.wOff + k);
@@ -613,7 +685,7 @@ function drawNet() {
       if (mask && !mask[idx]) { a *= 0.25; }
       ctx.strokeStyle = rgb(col, Math.min(0.9, 0.03 + 0.85 * a)); ctx.lineWidth = 0.5 + 1.6 * a;
       ctx.beginPath(); ctx.moveTo(xs[l], ys[l][c]); ctx.lineTo(xs[l + 1], ys[l + 1][r]); ctx.stroke();
-      if (mask && mask[idx]) { ctx.strokeStyle = rgb(accC, 0.85); ctx.lineWidth = 1.4; ctx.stroke(); }
+      if (mask && mask[idx]) { ctx.strokeStyle = rgb(hlC, 0.9); ctx.lineWidth = 1.4; ctx.stroke(); }
     }
   });
   cols.forEach((n, k) => {
@@ -627,13 +699,13 @@ function drawNet() {
       const big = k === 0 || k === cols.length - 1;
       ctx.beginPath(); ctx.arc(xs[k], ys[k][j], big ? 6 : 3.6, 0, 2 * Math.PI);
       ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = PAL.ink; ctx.globalAlpha = 0.6; ctx.lineWidth = 0.8; ctx.stroke(); ctx.globalAlpha = 1;
-      if (mask && k > 0 && mask[offs[k - 1].bOff + j]) { ctx.strokeStyle = PAL.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(xs[k], ys[k][j], big ? 8 : 5.5, 0, 2 * Math.PI); ctx.stroke(); }
+      if (mask && k > 0 && mask[offs[k - 1].bOff + j]) { ctx.strokeStyle = PAL.hl; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(xs[k], ys[k][j], big ? 8 : 5.5, 0, 2 * Math.PI); ctx.stroke(); }
     }
   });
   ctx.fillStyle = PAL.muted; ctx.font = "11px " + cssVar("--f-mono");
   SYS[S.key].inputs.forEach((name, j) => { ctx.textAlign = "right"; ctx.fillText(name, xs[0] - 9, ys[0][j] + 4); });
   ctx.textAlign = "left"; ctx.fillText(SYS[S.key].out, xs[xs.length - 1] + 9, ys[ys.length - 1][0] + 4);
-  for (const [idx, style] of [[S.hover, PAL.ink], [S.sel, PAL.accent]]) if (idx >= 0) highlight(ctx, idx, style);
+  for (const [idx, style] of [[S.hover, PAL.muted], [S.coefHover, PAL.muted], [S.sel, PAL.ink]]) if (idx >= 0) highlight(ctx, idx, style);
   updateNetHint();
 }
 function paramWhere(idx) {
@@ -671,12 +743,71 @@ function paramName(idx) {
   return p.type === "w" ? `${layer} weight, ${src} → ${dst}` : `${layer} bias, ${dst}`;
 }
 function updateNetHint() {
-  const h = { weight: "Edges: weight sign (orange +, teal −) and size, per layer. Units: bias.",
+  const h = { weight: "Edges: weight sign (red +, blue −) and size, per layer. Units: bias.",
     sens: "Edges and units: aggregate sensitivity Sᵢ, the RMS of ∂f/∂θᵢ over the probe.",
     c: "Edges and units: |c*ᵢ|, the lift of the rotation generator.",
     b: `Edges and units: |b*ᵢ|, the lift of −δ towards ${gName(S.group)} symmetry.` }[S.cmode];
   const pend = S.cmode !== "weight" && !S.attrib ? " Solving the lift…" : "";
-  $("cm-hint").textContent = h + ($("grp-show").checked ? " Blue outline: the parameter group." : "") + pend;
+  $("cm-hint").textContent = h + ($("grp-show").checked ? " Amber: the parameter group." : "") + pend;
+}
+
+// ------------------------------------------------------------------ coefficient scatter
+const coefCv = $("coef");
+let COEFG = null;
+const SUPD = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
+const decade = (e) => "10" + String(e).split("").map((ch) => SUPD[ch]).join("");
+function drawCoef() {
+  const { w, h, dpr } = sizeCanvas(coefCv, coefCv.clientHeight || 300), ctx = coefCv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const l = 60, r = 12, t = 10, bt = 38, font = "11px " + cssVar("--f-mono");
+  ctx.font = font; ctx.fillStyle = PAL.muted;
+  if (!S.attrib) { ctx.textAlign = "center"; ctx.fillText("Solving the lift…", w / 2, h / 2); COEFG = null; return; }
+  const P = S.net.P, cA = S.attrib.c, bA = S.attrib.b;
+  let mx = 0, mn = Infinity;
+  for (let i = 0; i < P; i++) for (const v of [Math.abs(cA[i]), Math.abs(bA[i])]) { if (v > mx) mx = v; if (v > 0 && v < mn) mn = v; }
+  const hiE = Math.ceil(Math.log10(mx || 1)), loE = Math.max(Math.floor(Math.log10(mn || 1e-12)), hiE - 10);
+  const X = (v) => l + (w - l - r) * ((Math.log10(Math.max(v, 10 ** loE)) - loE) / (hiE - loE)), Y = (v) => h - bt - (h - bt - t) * ((Math.log10(Math.max(v, 10 ** loE)) - loE) / (hiE - loE));
+  // grid and ticks
+  ctx.strokeStyle = PAL.line; ctx.lineWidth = 1; ctx.textBaseline = "middle";
+  const step = Math.max(1, Math.ceil((hiE - loE) / 6));
+  for (let e = loE; e <= hiE; e += step) {
+    ctx.beginPath(); ctx.moveTo(X(10 ** e), t); ctx.lineTo(X(10 ** e), h - bt); ctx.moveTo(l, Y(10 ** e)); ctx.lineTo(w - r, Y(10 ** e)); ctx.stroke();
+    ctx.textAlign = "center"; ctx.fillText(decade(e), X(10 ** e), h - bt + 12);
+    ctx.textAlign = "right"; ctx.fillText(decade(e), l - 6, Y(10 ** e));
+  }
+  ctx.strokeStyle = PAL.muted; ctx.beginPath(); ctx.moveTo(l, t); ctx.lineTo(l, h - bt); ctx.lineTo(w - r, h - bt); ctx.stroke();
+  ctx.textAlign = "center"; ctx.fillStyle = PAL.ink; ctx.font = "12.5px " + cssVar("--f-body");
+  ctx.fillText("|c*ᵢ|  (rotation)", l + (w - l - r) / 2, h - 10);
+  ctx.save(); ctx.translate(11, t + (h - bt - t) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("|b*ᵢ|  (towards symmetry)", 0, 0); ctx.restore();
+  // group threshold
+  const rule = $("grp-rule").value, mask = $("grp-show").checked ? groupMask() : null;
+  if (rule === "topb" || rule === "topc") {
+    const src = rule === "topb" ? bA : cA, k = groupK(), thr = Array.from(src, Math.abs).sort((a, b) => b - a)[Math.min(P - 1, k - 1)];
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = PAL.hl; ctx.lineWidth = 1.2; ctx.beginPath();
+    if (rule === "topb") { ctx.moveTo(l, Y(thr)); ctx.lineTo(w - r, Y(thr)); } else { ctx.moveTo(X(thr), t); ctx.lineTo(X(thr), h - bt); }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // points: non-group first, then group
+  const xs = new Float32Array(P), ys = new Float32Array(P);
+  const order = Array.from({ length: P }, (_, i) => i);
+  if (mask) order.sort((a, b) => mask[a] - mask[b]);
+  for (const i of order) {
+    const p = S.pInfo[i], col = LAYER_COLS[p.l % LAYER_COLS.length], x = X(Math.abs(cA[i])), y = Y(Math.abs(bA[i]));
+    xs[i] = x; ys[i] = y;
+    ctx.globalAlpha = mask ? (mask[i] ? 0.95 : 0.16) : 0.7;
+    ctx.beginPath(); ctx.arc(x, y, p.type === "b" ? 2.8 : 2.3, 0, 2 * Math.PI);
+    if (p.type === "b") { ctx.strokeStyle = col; ctx.lineWidth = 1.3; ctx.stroke(); } else { ctx.fillStyle = col; ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+  if (mask) { ctx.strokeStyle = PAL.hl; ctx.lineWidth = 1; for (let i = 0; i < P; i++) if (mask[i]) { ctx.beginPath(); ctx.arc(xs[i], ys[i], 4, 0, 2 * Math.PI); ctx.stroke(); } }
+  for (const [idx, col, rad] of [[S.coefHover, PAL.muted, 6], [S.sel, PAL.ink, 7]]) if (idx >= 0) { ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(xs[idx], ys[idx], rad, 0, 2 * Math.PI); ctx.stroke(); }
+  COEFG = { xs, ys };
+}
+function pickCoef(mx, my) {
+  if (!COEFG) return -1;
+  let best = -1, bd = 7;
+  for (let i = 0; i < COEFG.xs.length; i++) { const d = Math.hypot(mx - COEFG.xs[i], my - COEFG.ys[i]); if (d < bd) { bd = d; best = i; } }
+  return best;
 }
 
 // ------------------------------------------------------------------ readouts
@@ -740,7 +871,7 @@ function frame() {
   drawProfile(profileAt(S.theta, d.av));
   updateReadouts();
   drawTrace();
-  if (netDirty) { drawNet(); netDirty = false; }
+  if (netDirty) { drawNet(); drawCoef(); netDirty = false; }
 }
 
 // ------------------------------------------------------------------ lifts via the worker
@@ -773,6 +904,7 @@ function setGauge(g, silent) {
   S.gauge = g; $("g-norm").setAttribute("aria-pressed", g === "norm"); $("g-raw").setAttribute("aria-pressed", g === "raw");
   const why = { c6_wedge120: "In the normalised gauge the lift moves the parameters roughly 100 times further for the same effect. ", c6_wedge360: "" }[S.key] || "";
   $("gauge-hint").textContent = g === "raw" ? `Gauge: plain minimum-ℓ2 lift${SYS[S.key].gauge === "raw" ? " (the default for this system)" : ""}. ${why}` : "Gauge: sensitivity-normalised, as in the paper. The lift minimises Σ Sᵢ² cᵢ², which does not change when a parameter is rescaled.";
+  $("coef-gauge").textContent = g === "raw" ? "raw ℓ2 gauge" : "normalised gauge";
   if (!silent) { S.version++; S.attrib = null; S.grpAttrib = null; markDirty(true); requestAttrib(); }
 }
 function lockControls(on) {
@@ -867,7 +999,7 @@ async function walk(opts = {}) {
 // ------------------------------------------------------------------ single parameter and kicks
 function updateInspector() {
   const sl = $("sel-slider");
-  if (S.sel < 0) { $("sel-name").textContent = "One parameter: click an edge or a unit."; $("sel-row").hidden = true; sl.disabled = true; return; }
+  if (S.sel < 0) { $("sel-name").textContent = "Click an edge, a unit or a point in the coefficient plot to pick one parameter."; $("sel-row").hidden = true; sl.disabled = true; return; }
   const v0 = S.theta0[S.sel], span = Math.max(0.5, 2.5 * Math.abs(v0));
   sl.disabled = S.walking; sl.min = v0 - span; sl.max = v0 + span; sl.step = span / 500; sl.value = S.theta[S.sel];
   $("sel-name").textContent = paramName(S.sel); $("sel-row").hidden = false;
@@ -897,6 +1029,16 @@ function bind() {
   $("alpha").oninput = (e) => { S.alpha = +e.target.value; $("alpha-val").textContent = S.alpha.toFixed(2).replace("-", "−"); computeBase(); changed(); };
   $("lock-scale").onchange = (e) => { S.lock = e.target.checked; markDirty(); };
   $("show-probe").onchange = (e) => { S.probe = e.target.checked; markDirty(); };
+  $("show-data").onchange = (e) => { S.data = e.target.checked; markDirty(); };
+  const coefDefault = $("coef-ro").textContent;
+  coefCv.addEventListener("mousemove", (e) => {
+    const bb = coefCv.getBoundingClientRect(), p = pickCoef(e.clientX - bb.left, e.clientY - bb.top);
+    if (p === S.coefHover) return; S.coefHover = p;
+    $("coef-ro").textContent = p >= 0 ? `${paramName(p)}: |c*| = ${fmt(Math.abs(S.attrib.c[p]))}, |b*| = ${fmt(Math.abs(S.attrib.b[p]))}, S = ${fmt(S.attrib.sens[p])}` : coefDefault;
+    drawCoef(); drawNet();
+  });
+  coefCv.addEventListener("mouseleave", () => { S.coefHover = -1; $("coef-ro").textContent = coefDefault; drawCoef(); drawNet(); });
+  coefCv.addEventListener("click", (e) => { const bb = coefCv.getBoundingClientRect(), p = pickCoef(e.clientX - bb.left, e.clientY - bb.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); drawCoef(); } });
   $("sel-slider").oninput = (e) => { if (S.sel < 0 || S.walking) return; S.theta[S.sel] = +e.target.value; $("sel-val").textContent = `${fmt(S.theta[S.sel])} (trained ${fmt(S.theta0[S.sel])})`; changed(); netDirtyOnly(); };
   $("kick-size").oninput = (e) => { $("kick-val").textContent = (+e.target.value).toFixed(1) + "%"; };
   $("grp-rule").onchange = updateGroupInfo; $("grp-k").oninput = updateGroupInfo; $("grp-show").onchange = () => { netDirtyOnly(); updateNetHint(); };
@@ -911,7 +1053,7 @@ function bind() {
   $("reset").onclick = () => { if (S.walking) return; S.theta = S.theta0.slice(); updateInspector(); changed(); netDirtyOnly(); };
   netCv.addEventListener("mousemove", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p !== S.hover) { S.hover = p; netCv.title = p >= 0 ? `${paramName(p)} = ${fmt(S.theta[p])}` : ""; drawNet(); } });
   netCv.addEventListener("mouseleave", () => { S.hover = -1; drawNet(); });
-  netCv.addEventListener("click", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); } });
+  netCv.addEventListener("click", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); drawCoef(); } });
   fieldCv.addEventListener("mousemove", (e) => {
     const b = fieldCv.getBoundingClientRect(), x = -E + (2 * E * (e.clientX - b.left)) / b.width, y = E - (2 * E * (e.clientY - b.top)) / b.height;
     const v = S.sys.value(S.theta, x, y), m = S.lastDisplay ? S.lastDisplay.av.pg(x, y) : NaN, o = SYS[S.key].out, el = $("hover-ro");
