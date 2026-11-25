@@ -23,8 +23,9 @@
 
   function makeNet(spec) {
     // spec: [{W: [[...]] (out x in), b: [...]}] (an MLP on the raw inputs), or {feat, layers} for an MLP on
-    // group-invariant features of the inputs; flat params in PyTorch order (W then b, per layer)
-    const layers = Array.isArray(spec) ? spec : spec.layers, feat = Array.isArray(spec) ? null : featureMap(spec.feat);
+    // group-invariant inputs; flat params in PyTorch order (W then b, per layer)
+    const layers = Array.isArray(spec) ? spec : spec.layers, feat = !Array.isArray(spec) && spec.feat ? featureMap(spec.feat) : null;
+    const rd = !Array.isArray(spec) && spec.f32 ? Math.fround : (v) => v;   // float32 nets are stored in float32 digits
     const shapes = layers.map((l) => [l.W.length, l.W[0].length]);
     const P = shapes.reduce((s, [o, i]) => s + o * i + o, 0);
     const theta = new Float64Array(P);
@@ -33,9 +34,9 @@
     layers.forEach((l, li) => {
       const [o, i] = shapes[li];
       const wOff = k;
-      for (let r = 0; r < o; r++) for (let c = 0; c < i; c++) theta[k++] = l.W[r][c];
+      for (let r = 0; r < o; r++) for (let c = 0; c < i; c++) theta[k++] = rd(l.W[r][c]);
       const bOff = k;
-      for (let r = 0; r < o; r++) theta[k++] = l.b[r];
+      for (let r = 0; r < o; r++) theta[k++] = rd(l.b[r]);
       offs.push({ wOff, bOff, o, i });
     });
     const width = Math.max(...shapes.map((s) => Math.max(s[0], s[1])));
@@ -49,6 +50,7 @@
 
     // forward with one input tangent u; returns [v, vdot]
     function forward(th, x, u) {
+      if (!u) return [value1(th, x), 0];
       if (feat) feat(x, u, H[0], Hd[0]);
       else { const nIn = offs[0].i; for (let j = 0; j < nIn; j++) { H[0][j] = x[j]; Hd[0][j] = u ? u[j] : 0; } }
       let v = 0, vd = 0;
@@ -67,6 +69,91 @@
         }
       }
       return [v, vd];
+    }
+
+    // value only (no tangent), still filling Z and H so backward() works after it
+    function value1(th, x) {
+      if (feat) feat(x, null, H[0], Hd[0]);
+      else { const nIn = offs[0].i; for (let j = 0; j < nIn; j++) { H[0][j] = x[j]; Hd[0][j] = 0; } }
+      let v = 0;
+      for (let l = 0; l < L; l++) {
+        const { wOff, bOff, o, i } = offs[l], h = H[l], last = l === L - 1;
+        const hn = H[l + 1], hdn = Hd[l + 1], zl = Z[l], zdl = Zd[l];
+        for (let r = 0; r < o; r++) {
+          let z = th[bOff + r];
+          const row = wOff + r * i;
+          for (let c = 0; c < i; c++) z += th[row + c] * h[c];
+          if (last) v = z;
+          else { zl[r] = z; zdl[r] = 0; hn[r] = z / (1 + Math.exp(-z)); hdn[r] = 0; }
+        }
+      }
+      return v;
+    }
+
+    // value and both input-direction tangents (u = e1, e2) in one pass; out = [v, dv/dx0, dv/dx1]
+    const H1 = new Float64Array(width), H2 = new Float64Array(width), Ha = new Float64Array(width), Hb = new Float64Array(width);
+    const G1 = new Float64Array(width), G2 = new Float64Array(width), Ga = new Float64Array(width), Gb = new Float64Array(width);
+    const E1 = [1, 0, 0], E2 = [0, 1, 0];
+    function grad2(th, x, out) {
+      let h = Ha, g1 = G1, g2 = G2, hn = Hb, n1 = H1, n2 = H2;
+      if (feat) { feat(x, E1, h, g1); feat(x, E2, fh, g2); }
+      else { const nIn = offs[0].i; for (let j = 0; j < nIn; j++) { h[j] = x[j]; g1[j] = j === 0 ? 1 : 0; g2[j] = j === 1 ? 1 : 0; } }
+      for (let l = 0; l < L; l++) {
+        const { wOff, bOff, o, i } = offs[l], last = l === L - 1;
+        for (let r = 0; r < o; r++) {
+          let z = th[bOff + r], z1 = 0, z2 = 0;
+          const row = wOff + r * i;
+          for (let c = 0; c < i; c++) { const w = th[row + c]; z += w * h[c]; z1 += w * g1[c]; z2 += w * g2[c]; }
+          if (last) { if (r === 0) { out[0] = z; out[1] = z1; out[2] = z2; } }
+          else { const sg = 1 / (1 + Math.exp(-z)), sp = sg * (1 + z * (1 - sg)); hn[r] = z * sg; n1[r] = sp * z1; n2[r] = sp * z2; }
+        }
+        if (!last) {
+          let t = h; h = hn; hn = t; t = g1; g1 = n1; n1 = t; t = g2; g2 = n2; n2 = t;
+        }
+      }
+      return out;
+    }
+
+    // batched value: X holds N points with stride `st` (raw inputs first); writes N outputs
+    let bufA = new Float64Array(0), bufB = new Float64Array(0);
+    const fx = new Float64Array(4), fh = new Float64Array(width), fhd = new Float64Array(width);
+    function values(th, X, st, N, out) {
+      if (bufA.length < N * width) { bufA = new Float64Array(N * width); bufB = new Float64Array(N * width); }
+      let A = bufA, B = bufB;
+      const i0 = offs[0].i;
+      if (feat) {
+        for (let p = 0; p < N; p++) { for (let j = 0; j < st; j++) fx[j] = X[p * st + j]; feat(fx, null, fh, fhd); for (let c = 0; c < i0; c++) A[p * i0 + c] = fh[c]; }
+      } else for (let p = 0; p < N; p++) for (let c = 0; c < i0; c++) A[p * i0 + c] = X[p * st + c];
+      for (let l = 0; l < L; l++) {
+        const { wOff, bOff, o, i } = offs[l], last = l === L - 1;
+        let p = 0;
+        // four points at a time: each weight is loaded once for four multiply-adds
+        for (; p + 3 < N; p += 4) {
+          const a0 = p * i, a1 = a0 + i, a2 = a1 + i, a3 = a2 + i;
+          for (let r = 0; r < o; r++) {
+            const bb = th[bOff + r], row = wOff + r * i;
+            let z0 = bb, z1 = bb, z2 = bb, z3 = bb;
+            for (let c = 0; c < i; c++) { const w = th[row + c]; z0 += w * A[a0 + c]; z1 += w * A[a1 + c]; z2 += w * A[a2 + c]; z3 += w * A[a3 + c]; }
+            if (last) { if (r === 0) { out[p] = z0; out[p + 1] = z1; out[p + 2] = z2; out[p + 3] = z3; } }
+            else {
+              const b0 = p * o + r;
+              B[b0] = z0 / (1 + Math.exp(-z0)); B[b0 + o] = z1 / (1 + Math.exp(-z1));
+              B[b0 + 2 * o] = z2 / (1 + Math.exp(-z2)); B[b0 + 3 * o] = z3 / (1 + Math.exp(-z3));
+            }
+          }
+        }
+        for (; p < N; p++) {
+          const a0 = p * i, b0 = p * o;
+          for (let r = 0; r < o; r++) {
+            let z = th[bOff + r];
+            const row = wOff + r * i;
+            for (let c = 0; c < i; c++) z += th[row + c] * A[a0 + c];
+            if (last) { if (r === 0) out[p] = z; } else B[b0 + r] = z / (1 + Math.exp(-z));
+          }
+        }
+        const t = A; A = B; B = t;
+      }
+      return out;
     }
 
     // gradient wrt params of (a * v + ad * vdot) at the last forward() point, accumulated into g
@@ -98,7 +185,7 @@
         }
       }
     }
-    return { theta, P, offs, forward, backward, shapes, feat: Array.isArray(spec) ? null : spec.feat };
+    return { theta, P, offs, forward, backward, values, grad2, shapes, feat: Array.isArray(spec) ? null : spec.feat || null };
   }
 
   // ---------------------------------------------------------------- systems
@@ -111,18 +198,19 @@
       field(th, x, y, out) { x3[0] = x; x3[1] = y; out[0] = net.forward(th, x3, null)[0]; },
       jacRows(th, x, y, rows) { x3[0] = x; x3[1] = y; net.forward(th, x3, null); net.backward(th, 1, 0, rows[0]); },
       value(th, x, y) { x3[0] = x; x3[1] = y; return net.forward(th, x3, null)[0]; },
+      values(th, xy, N, out) { return net.values(th, xy, 2, N, out); },
     };
   }
 
   function forceSystem(net, getAlpha) {
     // f = -grad_q V(q; alpha); V_net input is (q1, q2, alpha)
     const inp = new Float64Array(3), e1 = [1, 0, 0], e2 = [0, 1, 0];
+    let buf3 = new Float64Array(0); const g3 = new Float64Array(3);
     return {
       d: 2,
       field(th, x, y, out) {
         inp[0] = x; inp[1] = y; inp[2] = getAlpha();
-        out[0] = -net.forward(th, inp, e1)[1];
-        out[1] = -net.forward(th, inp, e2)[1];
+        net.grad2(th, inp, g3); out[0] = -g3[1]; out[1] = -g3[2];
       },
       jacRows(th, x, y, rows) {
         inp[0] = x; inp[1] = y; inp[2] = getAlpha();
@@ -130,6 +218,12 @@
         net.forward(th, inp, e2); net.backward(th, 0, -1, rows[1]);
       },
       value(th, x, y) { inp[0] = x; inp[1] = y; inp[2] = getAlpha(); return net.forward(th, inp, null)[0]; },
+      values(th, xy, N, out) {
+        if (buf3.length < 3 * N) buf3 = new Float64Array(3 * N);
+        const a = getAlpha();
+        for (let p = 0; p < N; p++) { buf3[3 * p] = xy[2 * p]; buf3[3 * p + 1] = xy[2 * p + 1]; buf3[3 * p + 2] = a; }
+        return net.values(th, buf3, 3, N, out);
+      },
     };
   }
 
@@ -265,12 +359,18 @@
           for (let k = 0; k <= l; k++) { a[i][k] /= scale; h += a[i][k] * a[i][k]; }
           let f = a[i][l]; let g = f >= 0 ? -Math.sqrt(h) : Math.sqrt(h);
           e[i] = scale * g; h -= f * g; a[i][l] = f - g; f = 0;
+          // p = A u from the lower triangle, row by row (contiguous access): row j gives sum_k<=j a_jk u_k to p_j
+          // and a_jk u_j to p_k for k < j
+          const u = a[i];
+          for (let j = 0; j <= l; j++) e[j] = 0;
           for (let j = 0; j <= l; j++) {
-            a[j][i] = a[i][j] / h; g = 0;
-            for (let k = 0; k <= j; k++) g += a[j][k] * a[i][k];
-            for (let k = j + 1; k <= l; k++) g += a[k][j] * a[i][k];
-            e[j] = g / h; f += e[j] * a[i][j];
+            a[j][i] = u[j] / h;
+            const row = a[j], uj = u[j]; let sj = 0;
+            for (let k = 0; k < j; k++) { const v = row[k]; sj += v * u[k]; e[k] += v * uj; }
+            e[j] += sj + row[j] * uj;
           }
+          for (let j = 0; j <= l; j++) { e[j] /= h; f += e[j] * u[j]; }
+          g = 0;
           const hh = f / (h + h);
           for (let j = 0; j <= l; j++) {
             f = a[i][j]; e[j] = g = e[j] - hh * f;
@@ -384,28 +484,60 @@
   function gram(J) { // K = J J^T, four rows at a time so each row of J is read once per block
     const M = J.length, P = J[0].length, K = [];
     for (let m = 0; m < M; m++) K.push(new Float64Array(M));
+    // 4 x 4 register blocks: each pass over the columns reads 8 rows of J for 16 entries of K
+    const C = 512;   // column chunk, so the 8 row segments stay in cache
+    const row = (m) => J[Math.min(m, M - 1)];
     for (let m = 0; m < M; m += 4) {
-      const a0 = J[m], a1 = J[Math.min(m + 1, M - 1)], a2 = J[Math.min(m + 2, M - 1)], a3 = J[Math.min(m + 3, M - 1)];
-      for (let n = 0; n <= Math.min(m + 3, M - 1); n++) {
-        const b = J[n]; let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
-        for (let i = 0; i < P; i++) { const bi = b[i]; s0 += a0[i] * bi; s1 += a1[i] * bi; s2 += a2[i] * bi; s3 += a3[i] * bi; }
-        const S = [s0, s1, s2, s3];
-        for (let t = 0; t < 4 && m + t < M; t++) if (n <= m + t) { K[m + t][n] = S[t]; K[n][m + t] = S[t]; }
+      const a0 = row(m), a1 = row(m + 1), a2 = row(m + 2), a3 = row(m + 3);
+      for (let n = 0; n <= Math.min(m + 3, M - 1); n += 4) {
+        const b0 = row(n), b1 = row(n + 1), b2 = row(n + 2), b3 = row(n + 3);
+        const S = new Float64Array(16);
+        for (let c0 = 0; c0 < P; c0 += C) {
+          const c1 = Math.min(P, c0 + C);
+          let s00 = 0, s01 = 0, s02 = 0, s03 = 0, s10 = 0, s11 = 0, s12 = 0, s13 = 0, s20 = 0, s21 = 0, s22 = 0, s23 = 0, s30 = 0, s31 = 0, s32 = 0, s33 = 0;
+          for (let i = c0; i < c1; i++) {
+            const x0 = a0[i], x1 = a1[i], x2 = a2[i], x3 = a3[i], y0 = b0[i], y1 = b1[i], y2 = b2[i], y3 = b3[i];
+            s00 += x0 * y0; s01 += x0 * y1; s02 += x0 * y2; s03 += x0 * y3;
+            s10 += x1 * y0; s11 += x1 * y1; s12 += x1 * y2; s13 += x1 * y3;
+            s20 += x2 * y0; s21 += x2 * y1; s22 += x2 * y2; s23 += x2 * y3;
+            s30 += x3 * y0; s31 += x3 * y1; s32 += x3 * y2; s33 += x3 * y3;
+          }
+          S[0] += s00; S[1] += s01; S[2] += s02; S[3] += s03; S[4] += s10; S[5] += s11; S[6] += s12; S[7] += s13;
+          S[8] += s20; S[9] += s21; S[10] += s22; S[11] += s23; S[12] += s30; S[13] += s31; S[14] += s32; S[15] += s33;
+        }
+        for (let t = 0; t < 4 && m + t < M; t++) for (let u = 0; u < 4 && n + u < M; u++) if (n + u <= m + t) { K[m + t][n + u] = S[4 * t + u]; K[n + u][m + t] = S[4 * t + u]; }
       }
     }
     return K;
+  }
+  // sizes M whose last solve was nearly full rank: go straight to the dense path rather than spend M/3 pivoted
+  // Cholesky steps first only to abandon them (the result is identical either way, only the cost differs)
+  const denseM = {};
+  function denseEig(J, tol) {
+    const res = fullEig(gram(J));
+    let q = 0; for (const l of res.lam) if (l > tol) q++;
+    denseM[J.length] = q > J.length / 4;
+    return res;
   }
   function gramEig(J) {
     const M = J.length, d = new Float64Array(M);
     for (let m = 0; m < M; m++) d[m] = dot(J[m], J[m]);
     let d0 = 0; for (const v of d) d0 = Math.max(d0, v);
     const L = [], tol = 1e-13 * d0;
+    if (denseM[M]) return denseEig(J, tol);
     while (L.length < M) {
-      if (L.length > M / 3) return fullEig(gram(J)); // nearly full rank: forming K and a dense solve is cheaper
+      if (L.length > M / 3) return denseEig(J, tol); // nearly full rank: forming K and a dense solve is cheaper
       let p = 0; for (let m = 1; m < M; m++) if (d[m] > d[p]) p = m;
       if (!(d[p] > tol)) break;
-      const jp = J[p], col = new Float64Array(M);
-      for (let m = 0; m < M; m++) col[m] = dot(J[m], jp);
+      const jp = J[p], col = new Float64Array(M), P = jp.length;
+      let m = 0;
+      for (; m + 3 < M; m += 4) {   // four rows per pass: each entry of jp is loaded once for four products
+        const r0 = J[m], r1 = J[m + 1], r2 = J[m + 2], r3 = J[m + 3];
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+        for (let i = 0; i < P; i++) { const v = jp[i]; s0 += r0[i] * v; s1 += r1[i] * v; s2 += r2[i] * v; s3 += r3[i] * v; }
+        col[m] = s0; col[m + 1] = s1; col[m + 2] = s2; col[m + 3] = s3;
+      }
+      for (; m < M; m++) col[m] = dot(J[m], jp);
       for (const l of L) { const lp = l[p]; if (lp) for (let m = 0; m < M; m++) col[m] -= lp * l[m]; }
       const piv = Math.sqrt(d[p]);
       for (let m = 0; m < M; m++) { col[m] /= piv; d[m] -= col[m] * col[m]; }
@@ -481,6 +613,6 @@
     }).concat([{ colnorm: col, rank: r }]);
   }
 
-  root.SymCore = { cyclicState, ringState, topEig, gramEig, makeNet, scalarSystem, forceSystem, polarProbe, reynoldsAt, etaAt, probeState, jacobian, lift, symEig, norm, dot };
+  root.SymCore = { gram, cyclicState, ringState, topEig, gramEig, makeNet, scalarSystem, forceSystem, polarProbe, reynoldsAt, etaAt, probeState, jacobian, lift, symEig, norm, dot };
   if (typeof module !== "undefined") module.exports = root.SymCore;
 })(typeof window !== "undefined" ? window : globalThis);

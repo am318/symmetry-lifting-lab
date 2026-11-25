@@ -83,6 +83,8 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var
 .ladder .bar { height: 6px; border-radius: 3px; background: var(--soft); position: relative; overflow: hidden }
 .ladder .bar i { position: absolute; inset: 0 auto 0 0; background: var(--b); border-radius: 3px }
 .ladder .sel { color: var(--ink); font-weight: 500 }
+.opts { display: grid; grid-template-columns: repeat(2, max-content); gap: 6px 22px; margin-top: 8px }
+@media (max-width: 440px) { .opts { grid-template-columns: max-content } }
 .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--f-mono) }
 .legend canvas { height: 8px; width: 150px; border-radius: 2px }
 .hint { color: var(--muted); font-size: 12.5px; margin: 0; line-height: 1.4 }
@@ -216,15 +218,15 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         <canvas id="field" aria-label="Output field of the network over the plane"></canvas>
         <div id="hover-ro" hidden></div>
       </div>
-      <div class="row between">
+      <div class="row">
         <div class="legend"><span id="lg-name" style="font-family:var(--f-serif);font-style:italic;font-size:13px;color:var(--ink)"></span><span id="lg-lo">–</span><canvas id="lg-bar" width="150" height="8"></canvas><span id="lg-hi">–</span></div>
-        <div class="row">
+      </div>
+      <div class="opts">
           <label class="check" for="colour-style" title="How the field is coloured. Paper style: class fills for classifiers, viridis with contours for potentials">colour map <select id="colour-style" aria-label="Colour map">
             <option value="auto">paper style</option><option value="class">class fills</option><option value="heat">coolwarm heatmap</option><option value="potential">viridis + contours</option></select></label>
           <label class="check" id="data-label"><input type="checkbox" id="show-data" checked> show training data</label>
           <label class="check" title="Keep the colour range of the starting network during a walk, so changes in the field stay visible; untick to rescale the colours to the current field"><input type="checkbox" id="lock-scale" checked> keep colour range fixed</label>
           <label class="check" title="Show the polar grid of points where δ, η and the Jacobian J are evaluated"><input type="checkbox" id="show-probe"> show probe points</label>
-        </div>
       </div>
       <div class="row" id="alpha-row" hidden>
         <label for="alpha">stiffness α</label><input type="range" id="alpha" min="-1.1" max="1.1" step="0.05" value="-0.5" style="flex:1;width:auto"><span class="num" id="alpha-val">−0.50</span>
@@ -496,19 +498,32 @@ function computeBase() {
 
 // ------------------------------------------------------------------ group averages for display
 function ringMeans(th, nR, rMax) {
-  const NQ = 64, isF = SYS[S.key].kind === "force", t = new Float64Array(2);
-  const sm = new Float64Array(nR + 1), rad = new Float64Array(nR + 1), tan = new Float64Array(nR + 1);
+  const NQ = 64, t = new Float64Array(2);
+  const sm = new Float64Array(nR + 1);
+  const xy = new Float64Array(2 * (nR + 1) * NQ);
+  for (let i = 0; i <= nR; i++) for (let k = 0; k < NQ; k++) {
+    const r = (rMax * i) / nR, a = (2 * Math.PI * k) / NQ, q = i * NQ + k;
+    xy[2 * q] = r * Math.cos(a); xy[2 * q + 1] = r * Math.sin(a);
+  }
+  const vals = S.sys.values(th, xy, (nR + 1) * NQ, new Float64Array((nR + 1) * NQ));
   for (let i = 0; i <= nR; i++) {
-    const r = (rMax * i) / nR; let s = 0, a0 = 0, a1 = 0;
-    for (let k = 0; k < NQ; k++) {
-      const a = (2 * Math.PI * k) / NQ, c = Math.cos(a), sn = Math.sin(a);
-      s += S.sys.value(th, r * c, r * sn);
-      if (isF) { S.sys.field(th, r * c, r * sn, t); a0 += c * t[0] + sn * t[1]; a1 += -sn * t[0] + c * t[1]; }
-    }
-    sm[i] = s / NQ; rad[i] = a0 / NQ; tan[i] = a1 / NQ;
+    let s = 0, a0 = 0, a1 = 0;
+    for (let k = 0; k < NQ; k++) s += vals[i * NQ + k];
+    sm[i] = s / NQ;
   }
   const at = (arr, r) => { const u = (r / rMax) * nR, i = Math.min(nR - 1, Math.floor(u)), w = u - i; return arr[i] * (1 - w) + arr[i + 1] * w; };
-  return { mean: (r) => at(sm, r), rad: (r) => at(rad, r), tan: (r) => at(tan, r) };
+  // force ring means are exact at each radius asked for (the arrows use only a few distinct radii), cached
+  const fc = new Map();
+  const ringF = (r) => {
+    const key = r.toFixed(12); let v = fc.get(key);
+    if (!v) {
+      let a0 = 0, a1 = 0;
+      for (let k = 0; k < NQ; k++) { const a = (2 * Math.PI * k) / NQ, c = Math.cos(a), sn = Math.sin(a); S.sys.field(th, r * c, r * sn, t); a0 += c * t[0] + sn * t[1]; a1 += -sn * t[0] + c * t[1]; }
+      v = [a0 / NQ, a1 / NQ]; fc.set(key, v);
+    }
+    return v;
+  };
+  return { mean: (r) => at(sm, r), radTan: ringF };
 }
 // returns pg(x, y) for the network value and pgF(x, y, out) for the force (force system only)
 function averager(th) {
@@ -516,26 +531,35 @@ function averager(th) {
   if (n === 0) {
     const rm = ringMeans(th, 120, E * Math.SQRT2 + 0.01);
     return {
+      grid: () => { const pe = new Float64Array(G * G); for (let n = 0; n < G * G; n++) pe[n] = rm.mean(Math.hypot(GXY[2 * n], GXY[2 * n + 1])); return pe; },
       pg: (x, y) => rm.mean(Math.hypot(x, y)),
-      pgF: (x, y, out) => { const r = Math.hypot(x, y), c = r > 0 ? x / r : 1, s = r > 0 ? y / r : 0, fr = rm.rad(r), ft = rm.tan(r); out[0] = c * fr - s * ft; out[1] = s * fr + c * ft; },
+      pgF: (x, y, out) => { const r = Math.hypot(x, y), c = r > 0 ? x / r : 1, s = r > 0 ? y / r : 0, [fr, ft] = rm.radTan(r); out[0] = c * fr - s * ft; out[1] = s * fr + c * ft; },
     };
   }
   const cs = [], sn = [];
   for (let k = 0; k < n; k++) { cs.push(Math.cos((2 * Math.PI * k) / n)); sn.push(Math.sin((2 * Math.PI * k) / n)); }
   const t = new Float64Array(2);
   return {
+    grid: () => {
+      const M = G * G, xy = new Float64Array(2 * M * n), v = new Float64Array(M * n), pe = new Float64Array(M);
+      for (let k = 0; k < n; k++) for (let q = 0; q < M; q++) { const x = GXY[2 * q], y = GXY[2 * q + 1], o = 2 * (k * M + q); xy[o] = cs[k] * x - sn[k] * y; xy[o + 1] = sn[k] * x + cs[k] * y; }
+      S.sys.values(th, xy, M * n, v);
+      for (let k = 0; k < n; k++) for (let q = 0; q < M; q++) pe[q] += v[k * M + q];
+      for (let q = 0; q < M; q++) pe[q] /= n;
+      return pe;
+    },
     pg: (x, y) => { let s = 0; for (let k = 0; k < n; k++) s += S.sys.value(th, cs[k] * x - sn[k] * y, sn[k] * x + cs[k] * y); return s / n; },
     pgF: (x, y, out) => { out[0] = 0; out[1] = 0; for (let k = 0; k < n; k++) { S.sys.field(th, cs[k] * x - sn[k] * y, sn[k] * x + cs[k] * y, t); out[0] += cs[k] * t[0] + sn[k] * t[1]; out[1] += -sn[k] * t[0] + cs[k] * t[1]; } out[0] /= n; out[1] /= n; },
   };
 }
+const GXY = new Float64Array(2 * G * G);
+for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const n = j * G + i; GXY[2 * n] = -E + (2 * E * (i + 0.5)) / G; GXY[2 * n + 1] = E - (2 * E * (j + 0.5)) / G; }
 function displayData(th) {
   const isF = SYS[S.key].kind === "force", av = averager(th);
-  const val = new Float64Array(G * G), pe = new Float64Array(G * G);
+  const val = S.sys.values(th, GXY, G * G, new Float64Array(G * G)), pe = av.grid();
   let fMax = 0, dMax = 0, vMin = Infinity, vMax = -Infinity;
-  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
-    const x = -E + (2 * E * (i + 0.5)) / G, y = E - (2 * E * (j + 0.5)) / G, r = Math.hypot(x, y), n = j * G + i;
-    const v = S.sys.value(th, x, y), m = av.pg(x, y);
-    val[n] = v; pe[n] = m;
+  for (let n = 0; n < G * G; n++) {
+    const x = GXY[2 * n], y = GXY[2 * n + 1], r = Math.hypot(x, y), v = val[n], m = pe[n];
     if (r <= 1) { fMax = Math.max(fMax, Math.abs(v)); dMax = Math.max(dMax, Math.abs(v - m)); vMin = Math.min(vMin, v); vMax = Math.max(vMax, v); }
   }
   let arrows = null, qMax = 0, qdMax = 0;
@@ -1022,16 +1046,32 @@ function keplerOrbit(rApo, frac, deg, halves) {
 }
 // [fit over the whole domain, fit on the training region (null if there is none)], as fractions:
 // accuracy for classifiers, relative error vs the true field for regressions
+// network outputs on the score sets (value, or force for the two-body / Mexican hat), computed once per weight vector
+let EVAL = { sig: NaN, out: null };
+function setEval(th) {
+  let h = S.alpha * 7.3 + SYS[S.key].hash.length; for (let i = 0; i < th.length; i++) h += th[i] * ((i % 97) + 1);
+  const key = S.key + "|" + h;
+  if (EVAL.sig === key) return EVAL.out;
+  const cfg = SYS[S.key], val = (pts) => { const xy = new Float64Array(2 * pts.length); pts.forEach((p, k) => { xy[2 * k] = p[0]; xy[2 * k + 1] = p[1]; }); return S.sys.values(th, xy, pts.length, new Float64Array(pts.length)); };
+  const frc = (pts) => { const t = new Float64Array(2), o = new Float64Array(2 * pts.length); pts.forEach((p, k) => { S.sys.field(th, p[0], p[1], t); o[2 * k] = t[0]; o[2 * k + 1] = t[1]; }); return o; };
+  let out;
+  if (cfg.score === "acc" || cfg.score === "fit") out = { all: val(SCORE.all), wedge: val(SCORE.wedge) };
+  else if (cfg.score === "orbit") out = { all: frc(SCORE.all), wedge: frc(SCORE.wedge) };
+  else { if (!PROBE15) PROBE15 = C.polarProbe(15, 32, 1); out = { probe: frc(PROBE15) }; }
+  EVAL = { sig: key, out };
+  return out;
+}
+let PROBE15 = null;
 function scoresNum(th) {
-  const cfg = SYS[S.key];
-  if (cfg.score === "acc") { const acc = (pts) => { let ok = 0; for (const [x, y, lab] of pts) ok += ((S.sys.value(th, x, y) > 0) ? 1 : 0) === lab ? 1 : 0; return ok / pts.length; };
-    return [acc(SCORE.all), acc(SCORE.wedge)]; }
-  if (cfg.score === "fit") { const rel = (pts) => { let e = 0, s = 0; for (const [x, y, v] of pts) { e += (S.sys.value(th, x, y) - v) ** 2; s += v * v; } return Math.sqrt(e / s); };
-    return [rel(SCORE.all), rel(SCORE.wedge)]; }
-  if (cfg.score === "orbit") { const t = new Float64Array(2), rel = (pts) => { let e = 0, s = 0; for (const [x, y, fx, fy] of pts) { S.sys.field(th, x, y, t); e += (t[0] - fx) ** 2 + (t[1] - fy) ** 2; s += fx * fx + fy * fy; } return Math.sqrt(e / s); };
-    return [rel(SCORE.all), rel(SCORE.wedge)]; }
-  const pr = C.polarProbe(15, 32, 1), t = new Float64Array(2); let e = 0, s = 0;
-  for (const [x, y] of pr) { S.sys.field(th, x, y, t); const k = -(S.alpha + x * x + y * y); e += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; s += (k * x) ** 2 + (k * y) ** 2; }
+  const cfg = SYS[S.key], ev = setEval(th);
+  if (cfg.score === "acc") { const acc = (pts, z) => { let ok = 0; pts.forEach((p, k) => { ok += ((z[k] > 0) ? 1 : 0) === p[2] ? 1 : 0; }); return ok / pts.length; };
+    return [acc(SCORE.all, ev.all), acc(SCORE.wedge, ev.wedge)]; }
+  if (cfg.score === "fit") { const rel = (pts, z) => { let e = 0, s = 0; pts.forEach((p, k) => { e += (z[k] - p[2]) ** 2; s += p[2] * p[2]; }); return Math.sqrt(e / s); };
+    return [rel(SCORE.all, ev.all), rel(SCORE.wedge, ev.wedge)]; }
+  if (cfg.score === "orbit") { const rel = (pts, F) => { let e = 0, s = 0; pts.forEach((p, k) => { e += (F[2 * k] - p[2]) ** 2 + (F[2 * k + 1] - p[3]) ** 2; s += p[2] * p[2] + p[3] * p[3]; }); return Math.sqrt(e / s); };
+    return [rel(SCORE.all, ev.all), rel(SCORE.wedge, ev.wedge)]; }
+  let e = 0, s = 0;
+  PROBE15.forEach(([x, y], q) => { const k = -(S.alpha + x * x + y * y); e += (ev.probe[2 * q] - k * x) ** 2 + (ev.probe[2 * q + 1] - k * y) ** 2; s += (k * x) ** 2 + (k * y) ** 2; });
   return [Math.sqrt(e / s), null];
 }
 function scores() {
@@ -1040,17 +1080,17 @@ function scores() {
 }
 // the network's training objective on a sample from its training distribution
 function lossOf(th) {
-  const cfg = SYS[S.key];
+  const cfg = SYS[S.key], ev = setEval(th), W = SCORE && SCORE.wedge;
   if (cfg.score === "acc") {
     const sm = cfg.fam === "spiral" ? 0.05 : 0; let L = 0;
-    for (const [x, y, lab] of SCORE.wedge) { const z = S.sys.value(th, x, y), t = lab * (1 - 2 * sm) + sm; L += Math.max(z, 0) - z * t + Math.log1p(Math.exp(-Math.abs(z))); }
-    return L / SCORE.wedge.length;
+    W.forEach((p, k) => { const z = ev.wedge[k], t = p[2] * (1 - 2 * sm) + sm; L += Math.max(z, 0) - z * t + Math.log1p(Math.exp(-Math.abs(z))); });
+    return L / W.length;
   }
-  if (cfg.score === "fit") { let L = 0; for (const [x, y, v] of SCORE.wedge) L += (S.sys.value(th, x, y) - v) ** 2; return L / SCORE.wedge.length; }
-  if (cfg.score === "orbit") { const t = new Float64Array(2); let L = 0; for (const [x, y, fx, fy] of SCORE.wedge) { S.sys.field(th, x, y, t); L += (t[0] - fx) ** 2 + (t[1] - fy) ** 2; } return L / SCORE.wedge.length; }
-  const pr = C.polarProbe(15, 32, 1), t = new Float64Array(2); let L = 0;
-  for (const [x, y] of pr) { S.sys.field(th, x, y, t); const k = -(S.alpha + x * x + y * y); L += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; }
-  return L / (2 * pr.length);
+  if (cfg.score === "fit") { let L = 0; W.forEach((p, k) => { L += (ev.wedge[k] - p[2]) ** 2; }); return L / W.length; }
+  if (cfg.score === "orbit") { let L = 0; W.forEach((p, k) => { L += (ev.wedge[2 * k] - p[2]) ** 2 + (ev.wedge[2 * k + 1] - p[3]) ** 2; }); return L / W.length; }
+  let L = 0;
+  PROBE15.forEach(([x, y], q) => { const k = -(S.alpha + x * x + y * y); L += (ev.probe[2 * q] - k * x) ** 2 + (ev.probe[2 * q + 1] - k * y) ** 2; });
+  return L / (2 * PROBE15.length);
 }
 function stateFor(th, n, eta) {
   const [nR, nA] = SYS[S.key].probe;
