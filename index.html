@@ -190,7 +190,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         <div class="hint" id="grp-info">–</div>
         <label class="check"><input type="checkbox" id="grp-show" checked> highlight the group</label>
         <div class="row between"><label for="kick-size">kick size, % of ‖θ‖</label><span class="num" id="kick-val">1.0%</span></div>
-        <input type="range" id="kick-size" min="0.1" max="5" step="0.1" value="1">
+        <input type="range" id="kick-size" min="-1" max="1.7" step="0.01" value="0" aria-label="Kick size, log scale from 0.1% to 50% of the weight norm">
         <div class="row">
           <button class="btn" id="grp-kick" title="Add Gaussian noise to the group only">Add noise</button>
           <button class="btn" id="grp-zero" title="Set every parameter in the group to zero">Zero group</button>
@@ -1283,12 +1283,13 @@ function bind() {
   coefCv.addEventListener("mouseleave", () => { S.coefHover = -1; $("coef-ro").textContent = coefDefault; drawCoef(); drawNet(); });
   coefCv.addEventListener("click", (e) => { const bb = coefCv.getBoundingClientRect(), p = pickCoef(e.clientX - bb.left, e.clientY - bb.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); drawCoef(); } });
   $("sel-slider").oninput = (e) => { if (S.sel < 0 || S.walking) return; S.theta[S.sel] = +e.target.value; $("sel-val").textContent = `${fmt(S.theta[S.sel])} (trained ${fmt(S.theta0[S.sel])})`; changed(); netDirtyOnly(); };
-  $("kick-size").oninput = (e) => { $("kick-val").textContent = (+e.target.value).toFixed(1) + "%"; };
+  // log-scale slider: 0.1% to 50% of ||theta||
+  $("kick-size").oninput = (e) => { const v = 10 ** +e.target.value; $("kick-val").textContent = (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : v.toFixed(0)) + "%"; };
   $("grp-rule").onchange = updateGroupInfo; $("grp-k").oninput = updateGroupInfo; $("grp-show").onchange = () => { netDirtyOnly(); updateNetHint(); };
   $("grp-kick").onclick = () => {
     const mask = groupMask(); if (!mask || S.walking) return;
     let cnt = 0; for (const m of mask) cnt += m;
-    const sd = (+$("kick-size").value / 100) * C.norm(S.theta0) / Math.sqrt(cnt);
+    const sd = (10 ** +$("kick-size").value / 100) * C.norm(S.theta0) / Math.sqrt(cnt);
     for (let i = 0; i < mask.length; i++) if (mask[i]) { const u = Math.random() || 1e-12, v = Math.random(); S.theta[i] += sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
     updateInspector(); changed(); netDirtyOnly();
   };
