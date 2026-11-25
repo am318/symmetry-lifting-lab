@@ -35,7 +35,8 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); fon
 .wrap { max-width: 1360px; margin: 0 auto; display: grid; gap: 14px }
 header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 8px 0 4px }
 h1 { font-family: var(--f-serif); font-weight: 600; font-size: 1.75rem; margin: 0; letter-spacing: -0.005em }
-.sub { color: var(--muted); margin: 8px auto 0; max-width: 72ch }
+.sub { color: var(--muted); margin: 8px auto 0 }
+@media (min-width: 760px) { .htext { width: min-content } .htext .paper { white-space: nowrap } }
 .paper { margin: 2px 0 0; font-size: 13.5px; color: var(--muted) }
 .paper a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px }
 .paper a:hover { color: var(--ink); text-decoration-color: currentColor }
@@ -136,7 +137,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 
 <div class="wrap">
   <header>
-    <div>
+    <div class="htext">
       <h1>Parameter-Level Symmetry Attribution</h1>
       <p class="paper">Interactive companion to <a href="https://arxiv.org/abs/2608.24700" target="_blank" rel="noopener"><i>Parameter-Level Attribution of Symmetry in Trained Networks</i></a> (NeurReps 2026, arXiv:2608.24700)</p>
       <p class="sub">Move a trained network's weights and watch the symmetry of what it computes. Walk along <span class="math">c*</span> to rotate the learned function along its symmetry orbit, or along <span class="math">b*</span> to push it towards the equivariant subspace <span class="math">ℰ</span>.</p>
@@ -906,10 +907,11 @@ function paramName(idx) {
   return p.type === "w" ? `${layer} weight, ${src} → ${dst}` : `${layer} bias, ${dst}`;
 }
 function updateNetHint() {
-  const h = { weight: "Edges: weight sign (red +, blue −) and size, per layer. Units: bias.",
-    sens: "Edges and units: aggregate sensitivity Sᵢ, the RMS of ∂f/∂θᵢ over the probe.",
-    c: "Edges and units: |c*ᵢ|, the lift of the rotation generator.",
-    b: `Edges and units: |b*ᵢ|, the lift of −δ towards ${gName(S.group)} symmetry.` }[S.cmode];
+  const scale = " Thicker, darker lines are larger, relative to the largest value in the network (square-root scale).";
+  const h = { weight: "Edges: colour is the weight's sign (red +, blue −); thickness and opacity are its magnitude |wᵢ|, relative to the largest weight in the same layer. Units: the bias, coloured the same way.",
+    sens: "Edges and units: aggregate sensitivity Sᵢ, the RMS of ∂f/∂θᵢ over the probe." + scale,
+    c: "Edges and units: |c*ᵢ|, the lift of the rotation generator." + scale,
+    b: `Edges and units: |b*ᵢ|, the lift of −δ towards ${gName(S.group)} symmetry.` + scale }[S.cmode];
   const pend = S.cmode !== "weight" && !S.attrib ? " Solving the lift…" : "";
   $("cm-hint").textContent = h + ($("grp-show").checked ? " Amber: the parameter group." : "") + pend;
 }
