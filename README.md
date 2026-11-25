@@ -1,6 +1,6 @@
-# Symmetry Lifting Lab
+# Parameter-Level Symmetry Attribution
 
-An interactive, in-browser companion to *Parameter-Level Attribution of Symmetry in Trained Networks* (NeurReps 2026).
+An interactive, in-browser companion to [*Parameter-Level Attribution of Symmetry in Trained Networks*](https://arxiv.org/abs/2608.24700) (NeurReps 2026, arXiv:2608.24700).
 
 **Live page:** https://am318.github.io/symmetry-lifting-lab/
 
