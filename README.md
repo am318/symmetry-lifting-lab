@@ -7,10 +7,10 @@ An interactive, in-browser companion to *Parameter-Level Attribution of Symmetry
 Pick a trained network, then move its weights and watch the symmetry of what it computes:
 
 - **Along c\*** = J⁺η: the parameter direction that rotates the learned function along its symmetry orbit.
-- **Along b\*** = J⁺(−δ): the direction that shrinks the symmetry defect δ = f − P_G f. **Restore symmetry** walks along b\* until the network computes the symmetrised function P_G f.
+- **Along b\*** = J⁺(−δ): the direction that shrinks the equivariance defect δ = f − P_ℰ f. **Restore symmetry** walks along b\* until the network computes the symmetrised function P_ℰ f.
 - **Parameter groups:** select the top-k parameters by |b\*|, |c\*| or sensitivity S (or the biases), see how much of each direction the group carries, kick or zero it, or walk with only the group free.
 
-Systems: an annulus classifier (trained on a 90° wedge or on all angles), the learned force of a Mexican-hat Hamiltonian network, and a six-fold potential (trained on a 120° wedge or on the whole disc, with C₂, C₃, C₆ or SO(2) as the target group).
+Systems: an annulus classifier (trained on a 90° wedge or on all angles), the learned force of a Mexican-hat Hamiltonian network, a six-fold potential (trained on a 120° wedge or on the whole disc, with C₂, C₃, C₆ or SO(2) as the target group), a three-arm spiral classifier (C₃), and a two-body potential under softened gravity learned from three half orbits or 24 full orbits. Each network can be loaded at initialisation, after 2% and 10% of training, or fully trained, and a table compares every network's training loss with its symmetry defect.
 
 Everything is computed live in the browser in float64: the forward pass, the Jacobian, the truncated pseudo-inverse and the walks. Nothing is sent anywhere.
 

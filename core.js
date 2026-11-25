@@ -313,8 +313,21 @@
 
   // Top eigenpairs of a symmetric PSD matrix by orthogonalised subspace iteration; grows the block until
   // the tau cutoff falls inside it. Returns {lam, U} with U an array of eigenvector columns (Float64Array M).
+  // When the resolved rank is a sizeable fraction of M, a full eigendecomposition is faster than growing
+  // the block, so that path is taken directly (and remembered for the next solve of the same size).
+  const bigRank = {};
+  function fullEig(K) {
+    const M = K.length, A = K.map((r) => Float64Array.from(r)), lam = symEig(A), U = [];
+    for (let j = 0; j < M; j++) { const u = new Float64Array(M); for (let i = 0; i < M; i++) u[i] = A[i][j]; U.push(u); }
+    return { lam, U };
+  }
   function topEig(K, tau, k0) {
     const M = K.length;
+    if (bigRank[M]) {
+      const res = fullEig(K); let lmax = 0; for (const l of res.lam) lmax = Math.max(lmax, l);
+      bigRank[M] = Array.from(res.lam).filter((l) => l > 0 && Math.sqrt(l) >= tau * Math.sqrt(lmax)).length > M / 6;
+      return res;
+    }
     let k = Math.min(M, k0 || 64);
     let seed = 12345;
     const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 - 0.5; };
@@ -343,6 +356,7 @@
         return { lam, U };
       }
       k = Math.min(M, 2 * k);
+      if (k > M / 3) { bigRank[M] = nkeep > M / 6; return fullEig(K); }
     }
   }
 

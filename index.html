@@ -95,6 +95,15 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 .chips span { display: inline-flex; align-items: center; gap: 5px }
 .chips i { width: 8px; height: 8px; border-radius: 50%; display: inline-block }
 .chips i.hollow { background: transparent !important; border: 1.5px solid currentColor }
+.tablewrap { overflow-x: auto }
+#summary { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 8px }
+#summary th { text-align: left; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); padding: 4px 8px; white-space: nowrap }
+#summary td { padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+#summary .n { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+#summary th.n { font-family: inherit }
+#summary tbody tr { cursor: pointer }
+#summary tbody tr:hover { background: var(--soft) }
+#summary tr.cur td:first-child { box-shadow: inset 3px 0 0 var(--hl) }
 .about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px }
 .about p { margin: 0 0 8px; max-width: 65ch }
 .about h3 { font-family: var(--f-serif); font-weight: 600; font-size: 1.05rem; margin: 0 0 6px }
@@ -110,15 +119,18 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
   <header>
     <div>
       <h1>Symmetry Lifting Lab</h1>
-      <p class="sub">Move a trained network's weights and watch the symmetry of what it computes. Walk along <span class="math">c*</span> to rotate the learned function along its symmetry orbit, or along <span class="math">b*</span> to push it towards the symmetric functions.</p>
+      <p class="sub">Move a trained network's weights and watch the symmetry of what it computes. Walk along <span class="math">c*</span> to rotate the learned function along its symmetry orbit, or along <span class="math">b*</span> to push it towards the equivariant subspace <span class="math">ℰ</span>.</p>
     </div>
     <div class="pickers">
       <div class="seg" role="group" aria-label="System">
         <button id="fam-annulus" aria-pressed="true">Annulus classifier</button>
         <button id="fam-mexican" aria-pressed="false">Mexican hat</button>
         <button id="fam-sixfold" aria-pressed="false">Six-fold potential</button>
+        <button id="fam-spiral" aria-pressed="false">Spiral classifier</button>
+        <button id="fam-twobody" aria-pressed="false">Two-body</button>
       </div>
       <div class="seg" role="group" aria-label="Training data" id="data-seg"></div>
+      <div class="seg" role="group" aria-label="Training stage" id="stage-seg" title="Checkpoints from the same training run"></div>
     </div>
   </header>
 
@@ -159,7 +171,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         <div class="row between"><label for="kick-size">kick size, % of ‖θ‖</label><span class="num" id="kick-val">1.0%</span></div>
         <input type="range" id="kick-size" min="0.1" max="5" step="0.1" value="1">
         <div class="row">
-          <button class="btn" id="grp-kick" title="Add Gaussian noise to the group only">Kick group</button>
+          <button class="btn" id="grp-kick" title="Add Gaussian noise to the group only">Add noise</button>
           <button class="btn" id="grp-zero" title="Set every parameter in the group to zero">Zero group</button>
           <button class="btn" id="reset">Reset</button>
         </div>
@@ -174,8 +186,8 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
           <div class="seg small" role="group" aria-label="Symmetry group" id="group-seg"></div>
           <div class="seg small" role="group" aria-label="Field view">
             <button id="v-f" aria-pressed="true">f</button>
-            <button id="v-pe" aria-pressed="false">P<sub>G</sub> f</button>
-            <button id="v-delta" aria-pressed="false">δ = f − P<sub>G</sub> f</button>
+            <button id="v-pe" aria-pressed="false">P<sub>ℰ</sub> f</button>
+            <button id="v-delta" aria-pressed="false">δ = f − P<sub>ℰ</sub> f</button>
           </div>
         </div>
       </div>
@@ -186,8 +198,10 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <div class="row between">
         <div class="legend"><span id="lg-name" style="font-family:var(--f-serif);font-style:italic;font-size:13px;color:var(--ink)"></span><span id="lg-lo">–</span><canvas id="lg-bar" width="150" height="8"></canvas><span id="lg-hi">–</span></div>
         <div class="row">
+          <label class="check" for="colour-style">colours <select id="colour-style" aria-label="Colour style">
+            <option value="auto">as in the paper</option><option value="class">class fills</option><option value="heat">coolwarm heatmap</option><option value="potential">viridis + contours</option></select></label>
           <label class="check" id="data-label"><input type="checkbox" id="show-data" checked> training data</label>
-          <label class="check"><input type="checkbox" id="lock-scale" checked> lock colours</label>
+          <label class="check" title="Keep the colour scale of the trained network while it changes"><input type="checkbox" id="lock-scale" checked> fixed scale</label>
           <label class="check"><input type="checkbox" id="show-probe"> probe</label>
         </div>
       </div>
@@ -206,7 +220,8 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
           <div class="ro"><div class="k">moved ‖θ − θ₀‖ / ‖θ₀‖</div><div class="v" id="ro-dist">–</div></div>
           <div class="ro"><div class="k" id="ro-s1-k">–</div><div class="v" id="ro-s1">–</div></div>
           <div class="ro" id="ro-s2-box"><div class="k" id="ro-s2-k">–</div><div class="v" id="ro-s2">–</div></div>
-          <div class="ro"><div class="k">lift residual c* / b*</div><div class="v" id="ro-res">–</div></div>
+          <div class="ro"><div class="k" id="ro-loss-k">training loss</div><div class="v" id="ro-loss">–</div></div>
+          <div class="ro"><div class="k" title="‖Jc* − η‖/‖η‖ and ‖Jb* + δ‖/‖δ‖: the part of each target outside the resolved tangent space">relative residual, c* / b*</div><div class="v" id="ro-res">–</div></div>
           <div class="ro"><div class="k">resolved rank of J</div><div class="v" id="ro-rank">–</div></div>
         </div>
         <div id="ladder-box" hidden>
@@ -219,15 +234,17 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         <div class="seg" role="group" aria-label="Direction"><button id="w-c" aria-pressed="false">along c*</button><button id="w-b" aria-pressed="true">along b*</button></div>
         <div class="row">
           <button class="btn primary" id="w-go">Walk</button>
-          <button class="btn" id="w-restore" title="Resolved b* with all parameters free, in the normalised gauge, with a step-size check, until the defect is 1% of where it started">Restore symmetry</button>
+          <button class="btn" id="w-restore" title="Resolved walk along b* with all parameters free, in the normalised gauge (raw for the spiral), with a step-size check, until the equivariance defect is 1% of where it started; the ideal end point is P_ℰ f">Restore symmetry</button>
           <button class="btn" id="w-stop" disabled>Stop</button>
         </div>
+        <div class="row"><button class="btn" id="w-compare" title="From the trained weights, run a Fixed walk and then a Resolved walk in the chosen direction, and overlay both in the trace (as in the paper's figures)">Resolved vs Fixed</button><span class="hint">from the trained weights, to the t in the settings</span></div>
         <div class="status" id="status"></div>
+        <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true">equivariance defect</button><button id="tr-loss" aria-pressed="false">training loss</button></div></div>
         <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
         <details class="adv">
           <summary>Walk settings</summary>
           <div class="inner">
-            <div class="row between"><span class="lbl">direction</span><div class="seg small" role="group" aria-label="Mode"><button id="m-res" aria-pressed="true">resolved</button><button id="m-fix" aria-pressed="false">fixed</button></div></div>
+            <div class="row between"><span class="lbl">trajectory</span><div class="seg small" role="group" aria-label="Trajectory"><button id="m-res" aria-pressed="true" title="Recompute J and the lift at every step">Resolved</button><button id="m-fix" aria-pressed="false" title="Reuse the direction computed at t = 0">Fixed</button></div></div>
             <div class="row between"><span class="lbl">free</span><div class="seg small" role="group" aria-label="Free parameters"><button id="free-all" aria-pressed="true">all</button><button id="free-grp" aria-pressed="false">only the group</button></div></div>
             <div class="row between"><span class="lbl">gauge</span><div class="seg small" role="group" aria-label="Gauge"><button id="g-norm" aria-pressed="true" title="Minimise the sensitivity-weighted norm, as in the paper">normalised</button><button id="g-raw" aria-pressed="false" title="Plain minimum-ℓ2-norm lift">raw ℓ2</button></div></div>
             <div class="row between"><label for="wT">run to t =</label><span class="num" id="wT-val">1.0</span></div>
@@ -244,34 +261,44 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 
   <div class="grid2">
     <section class="panel">
-      <div class="row between"><h2 id="prof-title">Angular profile of δ</h2><span class="num" id="r0-val" style="font-size:12px;color:var(--muted)">r = 0.50</span></div>
+      <div class="row between"><h2 id="prof-title">Angular deviation profile</h2><span class="num" id="r0-val" style="font-size:12px;color:var(--muted)">r = 0.50</span></div>
       <svg id="profile" viewBox="0 0 460 210" width="100%" role="img" aria-label="Defect against angle at a fixed radius"></svg>
       <input type="range" id="r0" min="0.1" max="1" step="0.01" value="0.5" aria-label="Profile radius">
-      <p class="hint">δ around the amber circle in the field. Solid lines: the walk, coloured from blue (start) to red (latest). Dashed: the ideal flow at the latest t, a rotation for c* and e<sup>−t</sup>δ for b*.</p>
+      <p class="hint">δ = f − P<sub>ℰ</sub>f around the dotted circle in the field. Solid lines: the walk, coloured from blue (start) to red (latest). Dashed: the ideal flow at the latest t, a rotation for c* and e<sup>−t</sup>δ for b*.</p>
     </section>
     <section class="panel">
       <div class="row between"><h2>Lift coefficients by parameter</h2><span class="hint" id="coef-gauge"></span></div>
       <canvas id="coef" aria-label="Scatter of |c*_i| against |b*_i| for every parameter, coloured by layer"></canvas>
       <div class="chips" id="coef-legend"></div>
-      <p class="hint" id="coef-ro">Each point is one parameter. Points far right carry the rotation; points high up carry the move towards symmetry. Hover to name a point, click to pick it.</p>
+      <p class="hint" id="coef-ro">Each point is one parameter. Points far right carry most of the orbit direction η; points high up carry most of the move towards ℰ. Hover to name a point, click to pick it.</p>
     </section>
   </div>
+
+  <section class="panel" id="summary-panel">
+    <div class="row between"><h2>Training loss is not symmetry</h2><span class="hint">every trained network, at its default group</span></div>
+    <div class="tablewrap"><table id="summary"><thead><tr><th>System</th><th>Trained on</th><th class="n">Training loss</th><th class="n">Fit where trained</th><th class="n">Fit everywhere</th><th class="n">Defect ‖δ‖ / ‖f‖</th></tr></thead><tbody><tr><td colspan="6" class="hint">computing…</td></tr></tbody></table></div>
+    <p class="hint">A network can fit its training data almost perfectly and still be far from equivariant: where the data do not constrain it, nothing pushes it towards ℰ. Compare each pair: the same architecture and loss, trained on part or all of the symmetric domain. Fit is accuracy for classifiers and relative error for regressions; the spiral's label-smoothed loss cannot go below 0.199. Even with full coverage the spiral keeps a sizeable defect: the labels only fix the sign of the logit, not its size away from the boundary. Click a row to open it.</p>
+  </section>
 
   <section class="panel about">
     <div>
       <h3>What you are looking at</h3>
-      <p>Each system is a trained network <span class="math">f<sub>θ</sub></span> on the plane. A symmetry group <span class="math">G</span> of rotations acts on the inputs, and on the outputs when they are vectors. The Reynolds average <span class="math">P<sub>G</sub>f</span> averages <span class="math">f</span> over <span class="math">G</span>: a 64-point quadrature for <span class="math">SO(2)</span>, an exact average over the <span class="math">n</span> rotations for <span class="math">C<sub>n</sub></span>. The defect is <span class="math">δ = f − P<sub>G</sub>f</span>.</p>
-      <p>The orbit direction <span class="math">η = dΠ(ξ)f</span> rotates the function infinitesimally. It is orthogonal to <span class="math">δ</span>, so moving along it changes where the function points, not how symmetric it is.</p>
+      <p>Each system is a trained network <span class="math">f<sub>θ</sub></span> on the plane. A symmetry group <span class="math">G</span> of rotations acts on the inputs, and on the outputs when they are vectors. The Reynolds projector <span class="math">P<sub>ℰ</sub></span> averages <span class="math">f</span> over <span class="math">G</span>, projecting onto the equivariant subspace <span class="math">ℰ</span>: a 64-point quadrature for <span class="math">SO(2)</span>, an exact average over the <span class="math">n</span> rotations for <span class="math">C<sub>n</sub></span>. The equivariance defect is <span class="math">δ = f − P<sub>ℰ</sub>f</span>.</p>
+      <p>The orbit direction <span class="math">η<sub>ξ</sub> = dΠ(ξ)f</span>, for the rotation generator <span class="math">ξ</span>, rotates the function infinitesimally. It is orthogonal to <span class="math">δ</span>, so moving along it changes where the function points, not how symmetric it is.</p>
     </div>
     <div>
       <h3>The two directions</h3>
       <p><span class="math">c* = J<sup>+</sup>η</span> and <span class="math">b* = J<sup>+</sup>(−δ)</span>. <span class="math">J</span> is the Jacobian of the outputs on a polar probe with respect to the parameters. <span class="math">J<sup>+</sup></span> is truncated at <span class="math">σ<sub>k</sub> ≥ 10<sup>−3</sup>σ<sub>1</sub></span>, and the minimum norm is taken in the sensitivity-normalised gauge (or plain ℓ2, by the switch). The lift residual is the part of the target the parameters cannot reach locally.</p>
-      <p><b>Resolved</b> walks recompute the direction at every Euler step, <b>fixed</b> walks reuse the first one. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
+      <p><b>Resolved</b> walks recompute <span class="math">J</span> and the direction at every Euler step; <b>Fixed</b> walks reuse the one from <span class="math">t = 0</span>. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
+      <p>The <b>training stage</b> switch loads checkpoints of the same run, at initialisation and after 2% and 10% of training, so you can compare how well the lifts work before and after training. The <b>training loss</b> readout is each network's objective on a sample from its training distribution; it shows what a walk costs the fit.</p>
+      <p>The <b>coefficient plot</b> shows <span class="math">|c*ᵢ|</span> against <span class="math">|b*ᵢ|</span> for every parameter, in the gauge chosen for the lift. In the normalised gauge the norm minimised is <span class="math">Σ S<sub>i</sub>² c<sub>i</sub>²</span>, so a parameter with a small sensitivity can carry a large coefficient.</p>
     </div>
     <div>
       <h3>Systems</h3>
       <p><b>Annulus classifier</b>: an MLP (width 32, depth 3, SiLU) separating a disc (<span class="math">r &lt; 0.4</span>) from an annulus (<span class="math">0.6 &lt; r &lt; 1</span>), trained on a 90° wedge or on all angles. Probe: 15 radii × 32 angles.</p>
       <p><b>Mexican hat</b>: the potential network of an ASRNN trained on trajectories of <span class="math">H = ½‖p‖² + ½α‖q‖² + ¼‖q‖⁴</span>. The field is the learned force <span class="math">−∇<sub>q</sub>V</span>. Here the lift uses 8 radii × 32 angles at the displayed α only (the paper pools rows across α).</p>
+      <p><b>Spiral classifier</b>: the same MLP separating the two classes of a three-arm spiral, <span class="math">sign sin 3(φ − 2r)</span> for <span class="math">0.15 ≤ r ≤ 1</span>, trained on a 120° wedge or on the whole disc. The labels have <span class="math">C₃</span> symmetry only: averaging over <span class="math">C₆</span> or <span class="math">SO(2)</span> mixes the two classes, so choosing those groups shows what the lift does when the target symmetry is wrong. Probe: 15 radii × 48 angles.</p>
+      <p><b>Two-body</b>: the relative coordinate <span class="math">q</span> of two bodies under softened gravity, <span class="math">V = −1/√(‖q‖² + 0.09)</span>. The same MLP learns <span class="math">V</span> by matching the force <span class="math">−∇V</span> at positions observed along orbits: three half orbits that all start on the <span class="math">+x</span> axis, or 24 full orbits spread round the circle. Both reach a small training loss, but only the second data set pins down a rotation-invariant potential, so the first converges with a large <span class="math">SO(2)</span> defect. Probe: 15 radii × 32 angles.</p>
       <p><b>Six-fold potential</b>: the same MLP regressing <span class="math">V = r⁴ − 1.2r² + 0.25r⁶cos 6φ</span>, trained on a 120° wedge or on the whole disc. Choose <span class="math">C₂, C₃, C₆</span> or <span class="math">SO(2)</span> as the target symmetry. Probe: 15 radii × 48 angles, closed under every <span class="math">C<sub>n</sub></span> used.</p>
       <p class="hint">Method from <i>Parameter-Level Attribution of Symmetry in Trained Networks</i> (NeurReps 2026). Everything is computed live in your browser, in float64.</p>
     </div>
@@ -293,6 +320,8 @@ const FAMS = {
   annulus: { keys: ["annulus_wedge90", "annulus_wedge360"] },
   mexican: { keys: ["mexican_hat"] },
   sixfold: { keys: ["c6_wedge120", "c6_wedge360"] },
+  spiral: { keys: ["spiral_wedge120", "spiral_wedge360"] },
+  twobody: { keys: ["twobody_arcs", "twobody_orbits"] },
 };
 // style: "class" = pale class fills + coolwarm contours + black boundary; "potential" = viridis + white contours
 const SYS = {
@@ -306,12 +335,20 @@ const SYS = {
     inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", style: "potential" },
   c6_wedge360: { fam: "sixfold", hash: "sixfold-360", label: "whole disc", kind: "scalar", wedge: 360, probe: [15, 48], groups: [2, 3, 6, 0], group: 6, gauge: "raw",
     inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", style: "potential" },
+  spiral_wedge120: { fam: "spiral", hash: "spiral-120", label: "120° wedge", kind: "scalar", wedge: 120, probe: [15, 48], groups: [3, 6, 0], group: 3, gauge: "raw", restoreGauge: "raw",
+    inputs: ["x", "y"], out: "f", r0: 0.6, title: "Logit field", circles: [0.15, 1], score: "acc", style: "class" },
+  spiral_wedge360: { fam: "spiral", hash: "spiral-360", label: "whole disc", kind: "scalar", wedge: 360, probe: [15, 48], groups: [3, 6, 0], group: 3, gauge: "raw", restoreGauge: "raw",
+    inputs: ["x", "y"], out: "f", r0: 0.6, title: "Logit field", circles: [0.15, 1], score: "acc", style: "class" },
+  twobody_arcs: { fam: "twobody", hash: "twobody-arcs", label: "3 half orbits", kind: "force", noAlpha: true, probe: [15, 32], groups: [0], gauge: "norm",
+    inputs: ["q₁", "q₂"], out: "V", r0: 0.5, title: "Learned potential V and force −∇V", circles: [1], score: "orbit", style: "potential" },
+  twobody_orbits: { fam: "twobody", hash: "twobody-orbits", label: "24 full orbits", kind: "force", noAlpha: true, probe: [15, 32], groups: [0], gauge: "norm",
+    inputs: ["q₁", "q₂"], out: "V", r0: 0.5, title: "Learned potential V and force −∇V", circles: [1], score: "orbit", style: "potential" },
 };
 const S = {
   key: null, weights: null, net: null, sys: null, theta0: null, theta: null, alpha: -0.5, group: 0,
   view: "f", cmode: "weight", sel: -1, attrib: null, attribFor: -1, version: 0, grpAttrib: null, grpFor: "",
   which: "b", mode: "resolved", free: "all", gauge: "norm", T: 1, dt: 0.1, walking: false, stop: false,
-  hist: [], runs: [], base: null, profBase: null, r0: 0.5, hover: -1, lock: true, probe: false, data: true, coefHover: -1,
+  hist: [], runs: [], base: null, profBase: null, r0: 0.5, hover: -1, lock: true, probe: false, data: true, coefHover: -1, colour: "auto", traceKind: "defect", stage: "trained",
 };
 let worker = null, liftId = 0;
 const pending = new Map();
@@ -338,10 +375,16 @@ const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a
 const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 const fmt = (v) => { if (!isFinite(v)) return "–"; const a = Math.abs(v); return (a !== 0 && (a < 1e-2 || a >= 1e3) ? v.toExponential(1) : v.toFixed(a < 1 ? 3 : 1)).replace("-", "−"); };
 // ------------------------------------------------------------------ system set-up
+const STAGES = [["init", "init"], ["early", "2%"], ["mid", "10%"], ["trained", "trained"]];
+const wkey = () => { const k = S.key + (S.stage === "trained" ? "" : "@" + S.stage); return S.weights[k] ? k : S.key; };
 function setSystem(key, fromHash) {
   if (S.walking) return;
+  if (key !== S.key) S.stage = "trained";
   S.key = key; const cfg = SYS[key];
-  S.net = C.makeNet(S.weights[key]);
+  S.net = C.makeNet(S.weights[wkey()]);
+  const sts = STAGES.filter(([st]) => st === "trained" || S.weights[key + "@" + st]), sg = $("stage-seg");
+  sg.innerHTML = ""; sg.hidden = sts.length < 2;
+  for (const [st, lab] of sts) { const b = document.createElement("button"); b.textContent = lab; b.setAttribute("aria-pressed", st === S.stage); b.onclick = () => { if (S.walking || st === S.stage) return; S.stage = st; setSystem(S.key, true); }; sg.appendChild(b); }
   S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
   S.theta0 = S.net.theta.slice(); S.theta = S.theta0.slice();
   S.sel = -1; S.attrib = null; S.grpAttrib = null; S.hist = []; S.runs = []; S.r0 = cfg.r0; S.version++;
@@ -352,20 +395,24 @@ function setSystem(key, fromHash) {
   for (const k of FAMS[cfg.fam].keys) { const b = document.createElement("button"); b.textContent = SYS[k].label; b.setAttribute("aria-pressed", k === key); b.onclick = () => setSystem(k); ds.appendChild(b); }
   const gs = $("group-seg"); gs.innerHTML = ""; gs.hidden = cfg.groups.length < 2;
   for (const n of cfg.groups) { const b = document.createElement("button"); b.textContent = gName(n); b.id = "grp-" + n; b.setAttribute("aria-pressed", n === S.group); b.onclick = () => setGroup(n); gs.appendChild(b); }
-  $("alpha-row").hidden = cfg.kind !== "force";
+  $("alpha-row").hidden = cfg.kind !== "force" || !!cfg.noAlpha;
   $("field-title").textContent = cfg.title;
   const isV = cfg.out === "V";
-  $("v-f").textContent = cfg.out; $("v-pe").innerHTML = `P<sub>G</sub> ${cfg.out}`; $("v-delta").innerHTML = `δ = ${cfg.out} − P<sub>G</sub> ${cfg.out}`;
+  $("v-f").textContent = cfg.out; $("v-pe").innerHTML = `P<sub>ℰ</sub> ${cfg.out}`; $("v-delta").innerHTML = `δ = ${cfg.out} − P<sub>ℰ</sub> ${cfg.out}`;
   $("field-hint").textContent = {
-    annulus: "Fill: predicted class. Black line: decision boundary f = 0; thin lines: contours of f, blue below zero and red above. " + (cfg.wedge < 360 ? "Points: training data, all inside the 90° wedge. " : "Points: training data. ") + "Amber circle: the profile radius.",
-    mexican: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc. Amber circle: the profile radius.",
-    sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Amber circle: the profile radius.",
+    annulus: "Fill: predicted class. Black line: decision boundary f = 0 (dashed: where it was before the weights moved); thin lines: contours of f, blue below zero and red above. " + (cfg.wedge < 360 ? "Points: training data, all inside the 90° wedge. " : "Points: training data. ") + "Dotted circle: the profile radius.",
+    mexican: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc. Dotted circle: the profile radius.",
+    spiral: "Fill: predicted class; black line: f = 0 (dashed: before the weights moved); thin lines: contours of f. " + (cfg.wedge < 360 ? "Points: training data, all inside the 120° wedge (one period of the pattern). " : "Points: training data. ") + "The labels repeat every 120° and swap every 60°, so the task has C₃ symmetry but not C₆ or SO(2). Dotted circle: the profile radius.",
+    twobody: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Orange dots: the observed positions the network was trained on" + (key === "twobody_arcs" ? ", three half orbits that all start on the +x axis. " : ", 24 orbits spread round the circle. ") + "The true potential is rotation-invariant. Dotted circle: the profile radius.",
+    sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Dotted circle: the profile radius.",
   }[cfg.fam];
-  $("ro-s1-k").textContent = { acc: "accuracy, all angles", force: "force error vs true", fit: "error vs true V, whole disc" }[cfg.score];
-  $("ro-s2-k").textContent = { acc: "accuracy, training wedge", fit: "error vs true V, training wedge", force: "" }[cfg.score];
+  $("ro-s1-k").textContent = { acc: "accuracy, all angles", force: "force error vs true", fit: "error vs true V, whole disc", orbit: "force error vs true, whole disc" }[cfg.score];
+  $("ro-s2-k").textContent = { acc: "accuracy, training wedge", fit: "error vs true V, training wedge", force: "", orbit: "force error vs true, on the observed orbits" }[cfg.score];
   $("ro-s2-box").hidden = cfg.score === "force" || cfg.wedge === 360;
+  $("ro-loss-k").textContent = { annulus: "training loss (cross-entropy, training wedge)", spiral: "training loss (smoothed cross-entropy)", sixfold: "training loss (MSE vs true V)", twobody: "training loss (force MSE on the observed orbits)", mexican: "force MSE vs true (a proxy: the trajectory loss needs the data)" }[cfg.fam];
   $("ladder-box").hidden = cfg.groups.length < 2;
-  $("data-label").hidden = cfg.fam !== "annulus";
+  $("data-label").hidden = cfg.style !== "class" && cfg.score !== "orbit";
+  $("colour-style").querySelector('option[value="class"]').disabled = cfg.style !== "class";
   S.pInfo = Array.from({ length: S.net.P }, (_, i) => paramWhere(i));
   const L = S.net.offs.length;
   $("coef-legend").innerHTML = S.net.offs.map((_, l) => `<span style="color:${LAYER_COLS[l % LAYER_COLS.length]}"><i style="background:currentColor"></i><i class="hollow"></i><span style="color:var(--muted)">${l === L - 1 ? "readout" : "layer " + (l + 1)}</span></span>`).join("") + `<span>filled: weights · hollow: biases</span>`;
@@ -375,6 +422,7 @@ function setSystem(key, fromHash) {
   updateInspector(); updateGroupInfo();
   if (!fromHash) { try { history.replaceState(null, "", "#" + cfg.hash); } catch (e) { location.hash = cfg.hash; } }
   markDirty(true); requestAttrib();
+  if ($("summary").tBodies[0].rows[0]?.dataset.k) markSummary();
 }
 function setGroup(n) {
   if (S.walking) return;
@@ -383,7 +431,7 @@ function setGroup(n) {
 }
 function computeBase() {
   const d = displayData(S.theta0);
-  S.base = { fMax: d.fMax, dMax: d.dMax, vMin: d.vMin, vMax: d.vMax, qMax: d.qMax, qdMax: d.qdMax };
+  S.base = { fMax: d.fMax, dMax: d.dMax, vMin: d.vMin, vMax: d.vMax, qMax: d.qMax, qdMax: d.qdMax, val: d.val, pe: d.pe };
   S.profBase = null;
 }
 
@@ -453,19 +501,25 @@ function sizeCanvas(cv, h) {
   return { w, h: hh, dpr };
 }
 function drawField(d) {
-  const cfg = SYS[S.key], b = S.lock ? S.base : d, style = S.view === "delta" ? "delta" : cfg.style;
+  const cfg = SYS[S.key], b = S.lock ? S.base : d, logit = cfg.style === "class";
+  // colour style: "auto" = the paper's choice for this system; class fills only make sense for a logit
+  let pick = S.colour === "auto" || (S.colour === "class" && !logit) ? cfg.style : S.colour;
+  const style = S.view === "delta" ? "delta" : pick;
+  const hMid = logit ? 0 : (b.vMin + b.vMax) / 2, hHalf = logit ? b.fMax || 1 : (b.vMax - b.vMin) / 2 || 1;
   const img = off.getContext("2d").createImageData(G, G);
   const vSpan = b.vMax - b.vMin || 1;
   for (let n = 0; n < G * G; n++) {
     const v = d.val[n], m = d.pe[n], q = S.view === "pe" ? m : v;
-    const col = style === "delta" ? diverge((v - m) / (b.dMax || 1)) : style === "class" ? (q < 0 ? PAL.clsNeg : PAL.clsPos) : viridis((q - b.vMin) / vSpan);
+    const col = style === "delta" ? diverge((v - m) / (b.dMax || 1)) : style === "class" ? (q < 0 ? PAL.clsNeg : PAL.clsPos)
+      : style === "heat" ? diverge((q - hMid) / hHalf) : viridis((q - b.vMin) / vSpan);
     img.data[4 * n] = col[0]; img.data[4 * n + 1] = col[1]; img.data[4 * n + 2] = col[2]; img.data[4 * n + 3] = 255;
   }
   off.getContext("2d").putImageData(img, 0, 0);
   const o = cfg.out;
   if (style === "delta") drawLegend(-b.dMax, b.dMax, "cw", `δ`);
   else if (style === "class") drawLegend(-b.fMax, b.fMax, "cw", `${o}`);
-  else drawLegend(0, b.vMax - b.vMin, "vi", `${o} − min ${o}`);
+  else if (style === "heat") drawLegend(logit ? -hHalf : 0, logit ? hHalf : b.vMax - b.vMin, "cw", logit ? o : `${o} − min ${o}`);
+  else drawLegend(logit ? b.vMin : 0, logit ? b.vMax : b.vMax - b.vMin, "vi", logit ? o : `${o} − min ${o}`);
 
   const { w, dpr } = sizeCanvas(fieldCv), ctx = fieldCv.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -482,14 +536,15 @@ function drawField(d) {
       ctx.strokeStyle = rgb(diverge(i / 7 * 0.95)); ctx.globalAlpha = 0.85; ctx.lineWidth = 1; ctx.stroke();
     }
     ctx.globalAlpha = 1; ctx.beginPath(); contourPath(ctx, F, w, 0); ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2; ctx.stroke();
-  } else if (style === "potential") {
-    ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 0.8;
+  } else if (style === "potential" || style === "heat") {
+    ctx.strokeStyle = style === "heat" ? rgb(hexRgb(PAL.dark ? "#ffffff" : "#000000"), 0.22) : "rgba(255,255,255,0.7)"; ctx.lineWidth = 0.8;
     for (let i = 1; i < 12; i++) { ctx.beginPath(); contourPath(ctx, F, w, b.vMin + (vSpan * i) / 12); ctx.stroke(); }
+    if (logit) { ctx.beginPath(); contourPath(ctx, F, w, 0); ctx.strokeStyle = style === "potential" ? "#fff" : PAL.ink; ctx.lineWidth = 2; ctx.stroke(); }
   } else {
     ctx.beginPath(); contourPath(ctx, d.val.map((v, n) => v - d.pe[n]), w, 0); ctx.strokeStyle = rgb(hexRgb(PAL.ink), 0.35); ctx.lineWidth = 0.8; ctx.stroke();
   }
   // potentials are only meaningful on the probe disc: fade the corners
-  if (style === "potential" || (style === "delta" && cfg.style === "potential")) {
+  if (cfg.style === "potential") {
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w, w); ctx.arc(X(0), Y(0), R(1.02), 0, 2 * Math.PI, true);
     ctx.fillStyle = PAL.panel; ctx.globalAlpha = 0.9; ctx.fill("evenodd"); ctx.restore();
   }
@@ -501,10 +556,16 @@ function drawField(d) {
   }
   ctx.setLineDash([4, 4]); ctx.strokeStyle = guide; ctx.lineWidth = 1;
   cfg.circles.forEach((r) => { ctx.beginPath(); ctx.arc(X(0), Y(0), R(r), 0, 2 * Math.PI); ctx.stroke(); });
-  ctx.setLineDash([]); ctx.strokeStyle = PAL.hl; ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.arc(X(0), Y(0), R(S.r0), 0, 2 * Math.PI); ctx.stroke();
+  ctx.setLineDash([1.5, 3]); ctx.strokeStyle = onDark ? "#fff" : PAL.ink; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(X(0), Y(0), R(S.r0), 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]); ctx.lineCap = "butt";
+  // where the trained network's boundary (or the zero level of delta) was, once the weights have moved
+  let moved = false; for (let i = 0; i < S.theta.length && !moved; i++) moved = S.theta[i] !== S.theta0[i];
+  if (moved && S.base.val && logit && style !== "delta") {
+    ctx.beginPath(); contourPath(ctx, S.view === "pe" ? S.base.pe : S.base.val, w, 0);
+    ctx.setLineDash([6, 4]); ctx.strokeStyle = rgb(hexRgb(PAL.ink), 0.55); ctx.lineWidth = 1.6; ctx.stroke(); ctx.setLineDash([]);
+  }
   // training data, as in the paper's decision-boundary figures
-  if (cfg.fam === "annulus" && S.data && SCORE) {
+  if (cfg.style === "class" && S.data && SCORE) {
     const pts = SCORE.wedge.slice(0, 220);
     ctx.lineWidth = 0.9; ctx.strokeStyle = "rgba(0,0,0,0.85)";
     for (const [x, y, lab] of pts) {
@@ -516,6 +577,11 @@ function drawField(d) {
         ctx.strokeStyle = PAL.ptPos; ctx.lineWidth = 1.8; ctx.stroke(); ctx.lineWidth = 0.9; ctx.strokeStyle = "rgba(0,0,0,0.85)"; ctx.lineCap = "butt";
       }
     }
+  }
+  if (cfg.score === "orbit" && S.data && SCORE) {
+    ctx.fillStyle = "#d55e00"; ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 0.7;
+    const pts = SCORE.wedge, stp = Math.max(1, Math.floor(pts.length / 900));
+    for (let k = 0; k < pts.length; k += stp) { ctx.beginPath(); ctx.arc(X(pts[k][0]), Y(pts[k][1]), 1.9, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }
   }
   if (S.probe) {
     const [nR, nA] = cfg.probe; ctx.fillStyle = onDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
@@ -597,10 +663,12 @@ function drawProfile(cur) {
 const runLabel = (h) => `${h.which === "c" ? "c*" : "b*"} ${h.mode}${h.free === "group" ? ", group" : ""}`;
 function drawTrace() {
   const svg = $("trace"), W = 300, H = 150, l = 46, r = 10, t = 10, bt = 22;
-  const runs = S.runs.concat(S.hist.length > 1 ? [{ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect]), which: S.hist.which, mode: S.hist.mode }] : []);
-  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to trace the defect against t</text>`; return; }
+  const runs = S.runs.concat(S.hist.length > 1 ? [{ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss]), which: S.hist.which, mode: S.hist.mode }] : []);
+  const qi = S.traceKind === "loss" ? 2 : 1, qName = qi === 2 ? "training loss" : "defect";
+  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to trace the ${qName} against t</text>`; return; }
+  runs.forEach((rn) => { rn.q = rn.pts.map((p) => [p[0], p[qi] ?? NaN]).filter((p) => isFinite(p[1])); });
   let tMax = 0, yMax = 0, yMin = Infinity;
-  runs.forEach((rn) => rn.pts.forEach(([x, y]) => { tMax = Math.max(tMax, x); yMax = Math.max(yMax, y); yMin = Math.min(yMin, y); }));
+  runs.forEach((rn) => rn.q.forEach(([x, y]) => { tMax = Math.max(tMax, x); yMax = Math.max(yMax, y); yMin = Math.min(yMin, y); }));
   const logy = yMin > 0 && yMax / yMin > 8;
   const fy = (y) => (logy ? Math.log10(y) : y), y0 = logy ? Math.log10(yMin) - 0.05 : 0, y1 = logy ? Math.log10(yMax) + 0.1 : yMax * 1.08;
   const X = (x) => l + ((W - l - r) * x) / (tMax || 1), Y = (y) => t + (H - t - bt) * (1 - (fy(y) - y0) / ((y1 - y0) || 1));
@@ -609,10 +677,10 @@ function drawTrace() {
   s += `<text x="${l - 4}" y="${t + 8}" text-anchor="end">${fmt(logy ? Math.pow(10, y1) : y1)}</text><text x="${l - 4}" y="${H - bt}" text-anchor="end">${logy ? fmt(Math.pow(10, y0)) : "0"}</text>`;
   runs.forEach((rn, i) => {
     const col = rn.which === "c" ? PAL.c : PAL.b, dash = rn.mode === "fixed" ? "5 3" : "";
-    s += `<path d="${rn.pts.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="${dash}" opacity="${i === runs.length - 1 ? 1 : 0.6}"/>`;
+    s += `<path d="${rn.q.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="${dash}" opacity="${i === runs.length - 1 ? 1 : 0.6}"/>`;
     s += `<text x="${l + 6}" y="${t + 10 + 12 * i}" style="fill:${col}">${rn.label}</text>`;
   });
-  s += `<text x="${W - r}" y="${t + 8}" text-anchor="end">defect${logy ? " (log)" : ""}</text>`;
+  s += `<text x="${W - r}" y="${t + 8}" text-anchor="end">${qName}${logy ? " (log)" : ""}</text>`;
   svg.innerHTML = s;
 }
 
@@ -628,7 +696,7 @@ function groupMask() {
   return mask;
 }
 const groupK = () => Math.max(1, Math.round(Math.exp((Math.log(S.net.P) * +$("grp-k").value) / 1000)));
-function groupKey() { const rule = $("grp-rule").value; return `${S.key}|${rule}|${rule.startsWith("top") ? groupK() : ""}|${S.group}|${S.gauge}|${S.attribFor}`; }
+function groupKey() { const rule = $("grp-rule").value; return `${wkey()}|${rule}|${rule.startsWith("top") ? groupK() : ""}|${S.group}|${S.gauge}|${S.attribFor}`; }
 let grpTimer = 0;
 function updateGroupInfo() {
   const rule = $("grp-rule").value, isTop = rule.startsWith("top");
@@ -777,8 +845,8 @@ function drawCoef() {
   }
   ctx.strokeStyle = PAL.muted; ctx.beginPath(); ctx.moveTo(l, t); ctx.lineTo(l, h - bt); ctx.lineTo(w - r, h - bt); ctx.stroke();
   ctx.textAlign = "center"; ctx.fillStyle = PAL.ink; ctx.font = "12.5px " + cssVar("--f-body");
-  ctx.fillText("|c*ᵢ|  (rotation)", l + (w - l - r) / 2, h - 10);
-  ctx.save(); ctx.translate(11, t + (h - bt - t) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("|b*ᵢ|  (towards symmetry)", 0, 0); ctx.restore();
+  ctx.fillText("|c*ᵢ|  (along the orbit)", l + (w - l - r) / 2, h - 10);
+  ctx.save(); ctx.translate(11, t + (h - bt - t) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("|b*ᵢ|  (towards ℰ)", 0, 0); ctx.restore();
   // group threshold
   const rule = $("grp-rule").value, mask = $("grp-show").checked ? groupMask() : null;
   if (rule === "topb" || rule === "topc") {
@@ -815,13 +883,43 @@ let SCORE = null;
 function makeScoreSets() {
   const cfg = SYS[S.key]; let seed = 7;
   const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-  if (cfg.score === "acc") {
+  if (cfg.fam === "spiral") {
+    // labels sin(3(phi - 2 r)) > 0 on 0.15 <= r <= 1, margin |sin| >= 0.25 left empty (as in training)
+    const mk = (deg) => { const pts = []; while (pts.length < 1200) { const r = Math.sqrt(0.0225 + 0.9775 * rnd()), a = (deg * Math.PI / 180) * rnd(), q = Math.sin(3 * (a - 2 * r)); if (Math.abs(q) >= 0.25) pts.push([r * Math.cos(a), r * Math.sin(a), q > 0 ? 1 : 0]); } return pts; };
+    SCORE = { all: mk(360), wedge: mk(cfg.wedge) };
+  } else if (cfg.score === "acc") {
     const mk = (deg) => { const pts = []; for (let k = 0; k < 1200; k++) { const inner = k % 2 === 0, r = inner ? 0.4 * Math.sqrt(rnd()) : Math.sqrt(0.36 + 0.64 * rnd()), a = (deg * Math.PI / 180) * rnd(); pts.push([r * Math.cos(a), r * Math.sin(a), inner ? 0 : 1]); } return pts; };
     SCORE = { all: mk(360), wedge: mk(cfg.wedge) };
   } else if (cfg.score === "fit") {
     const mk = (deg) => { const pts = []; for (let k = 0; k < 1500; k++) { const r = Math.sqrt(rnd()), a = (deg * Math.PI / 180) * rnd(); const x = r * Math.cos(a), y = r * Math.sin(a); pts.push([x, y, tgtC6(x, y)]); } return pts; };
     SCORE = { all: mk(360), wedge: mk(cfg.wedge) };
+  } else if (cfg.score === "orbit") {
+    // the training positions, regenerated exactly as in training (leapfrog, dt = 1e-3, a point every 25 steps), with the true force
+    const spec = S.key === "twobody_arcs" ? [[0.9, 0.55, 0, 1], [0.7, 0.6, 0, 1], [0.5, 0.7, 0, 1]]
+      : Array.from({ length: 24 }, (_, k) => [[0.9, 0.75, 0.6, 0.45][k % 4], [0.5, 0.65, 0.8][k % 3], 15 * k, 2]);
+    const data = []; for (const s of spec) for (const [x, y] of keplerOrbit(...s)) data.push([x, y, ...trueForce2b(x, y)]);
+    const all = []; for (let k = 0; k < 1500; k++) { const r = Math.sqrt(0.01 + 0.99 * rnd()), a = 2 * Math.PI * rnd(), x = r * Math.cos(a), y = r * Math.sin(a); all.push([x, y, ...trueForce2b(x, y)]); }
+    SCORE = { all, wedge: data };
   } else SCORE = null;
+}
+// two-body problem in the relative coordinate, softened gravity V = -1/sqrt(|q|^2 + A^2)
+const A2B = 0.3;
+function trueForce2b(x, y) { const s = (x * x + y * y + A2B * A2B) ** -1.5; return [-x * s, -y * s]; }
+function keplerOrbit(rApo, frac, deg, halves) {
+  const p = (deg * Math.PI) / 180, dt = 1e-3;
+  let x = rApo * Math.cos(p), y = rApo * Math.sin(p);
+  const vc = Math.sqrt(rApo * rApo * (rApo * rApo + A2B * A2B) ** -1.5);
+  let vx = -frac * vc * Math.sin(p), vy = frac * vc * Math.cos(p);
+  const pts = [[x, y]]; let prev = -1, turns = 0, step = 0;
+  while (turns < halves && step < 200000) {
+    let [fx, fy] = trueForce2b(x, y); vx += 0.5 * dt * fx; vy += 0.5 * dt * fy;
+    x += dt * vx; y += dt * vy;
+    [fx, fy] = trueForce2b(x, y); vx += 0.5 * dt * fx; vy += 0.5 * dt * fy;
+    step++;
+    const sg = x * vx + y * vy > 0 ? 1 : -1; if (sg !== prev) { turns++; prev = sg; }
+    if (step % 25 === 0) pts.push([x, y]);
+  }
+  return pts;
 }
 function scores() {
   const cfg = SYS[S.key];
@@ -829,9 +927,25 @@ function scores() {
     return [(100 * acc(SCORE.all)).toFixed(1) + "%", (100 * acc(SCORE.wedge)).toFixed(1) + "%"]; }
   if (cfg.score === "fit") { const rel = (pts) => { let e = 0, s = 0; for (const [x, y, v] of pts) { e += (S.sys.value(S.theta, x, y) - v) ** 2; s += v * v; } return Math.sqrt(e / s); };
     return [(100 * rel(SCORE.all)).toFixed(2) + "%", (100 * rel(SCORE.wedge)).toFixed(2) + "%"]; }
+  if (cfg.score === "orbit") { const t = new Float64Array(2), rel = (pts) => { let e = 0, s = 0; for (const [x, y, fx, fy] of pts) { S.sys.field(S.theta, x, y, t); e += (t[0] - fx) ** 2 + (t[1] - fy) ** 2; s += fx * fx + fy * fy; } return Math.sqrt(e / s); };
+    return [(100 * rel(SCORE.all)).toFixed(1) + "%", (100 * rel(SCORE.wedge)).toFixed(1) + "%"]; }
   const pr = C.polarProbe(15, 32, 1), t = new Float64Array(2); let e = 0, s = 0;
   for (const [x, y] of pr) { S.sys.field(S.theta, x, y, t); const k = -(S.alpha + x * x + y * y); e += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; s += (k * x) ** 2 + (k * y) ** 2; }
   return [(100 * Math.sqrt(e / s)).toFixed(1) + "%", ""];
+}
+// the network's training objective on a sample from its training distribution
+function lossOf(th) {
+  const cfg = SYS[S.key];
+  if (cfg.score === "acc") {
+    const sm = cfg.fam === "spiral" ? 0.05 : 0; let L = 0;
+    for (const [x, y, lab] of SCORE.wedge) { const z = S.sys.value(th, x, y), t = lab * (1 - 2 * sm) + sm; L += Math.max(z, 0) - z * t + Math.log1p(Math.exp(-Math.abs(z))); }
+    return L / SCORE.wedge.length;
+  }
+  if (cfg.score === "fit") { let L = 0; for (const [x, y, v] of SCORE.wedge) L += (S.sys.value(th, x, y) - v) ** 2; return L / SCORE.wedge.length; }
+  if (cfg.score === "orbit") { const t = new Float64Array(2); let L = 0; for (const [x, y, fx, fy] of SCORE.wedge) { S.sys.field(th, x, y, t); L += (t[0] - fx) ** 2 + (t[1] - fy) ** 2; } return L / SCORE.wedge.length; }
+  const pr = C.polarProbe(15, 32, 1), t = new Float64Array(2); let L = 0;
+  for (const [x, y] of pr) { S.sys.field(th, x, y, t); const k = -(S.alpha + x * x + y * y); L += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; }
+  return L / (2 * pr.length);
 }
 function stateFor(th, n, eta) {
   const [nR, nA] = SYS[S.key].probe;
@@ -839,11 +953,12 @@ function stateFor(th, n, eta) {
 }
 function updateReadouts() {
   const cfg = SYS[S.key], d = stateFor(S.theta, S.group, false).defect;
-  $("ro-defect-k").textContent = `defect for ${gName(S.group)}, ‖δ‖ / ‖f‖`;
+  $("ro-defect-k").textContent = `equivariance defect ‖δ‖ / ‖f‖, G = ${gName(S.group)}`;
   $("ro-defect").textContent = fmt(d);
   let dd = 0, n0 = 0; for (let i = 0; i < S.theta.length; i++) { dd += (S.theta[i] - S.theta0[i]) ** 2; n0 += S.theta0[i] ** 2; }
   $("ro-dist").textContent = fmt(Math.sqrt(dd / n0));
   const [s1, s2] = scores(); $("ro-s1").textContent = s1; $("ro-s2").textContent = s2;
+  $("ro-loss").textContent = fmt(lossOf(S.theta));
   const fresh = S.attrib && S.attribFor === S.version;
   if (S.attrib) { $("ro-res").innerHTML = `${S.attrib.resC.toFixed(3)} <small>/</small> ${S.attrib.resB.toFixed(3)}${fresh ? "" : " <small>…</small>"}`; $("ro-rank").innerHTML = `${S.attrib.rank}${fresh ? "" : " <small>…</small>"}`; }
   else { $("ro-res").innerHTML = "<small>solving…</small>"; $("ro-rank").innerHTML = "<small>…</small>"; }
@@ -878,7 +993,7 @@ function frame() {
 function lift(theta, mask) {
   return new Promise((resolve) => {
     const id = ++liftId; pending.set(id, resolve);
-    const th = theta.slice(), msg = { cmd: "lift", id, key: S.key, kind: SYS[S.key].kind, probe: SYS[S.key].probe, group: S.group, alpha: S.alpha, raw: S.gauge === "raw", theta: th.buffer };
+    const th = theta.slice(), msg = { cmd: "lift", id, key: wkey(), kind: SYS[S.key].kind, probe: SYS[S.key].probe, group: S.group, alpha: S.alpha, raw: S.gauge === "raw", theta: th.buffer };
     const tr = [th.buffer];
     if (mask) { const m = mask.slice(); msg.mask = m.buffer; tr.push(m.buffer); }
     worker.postMessage(msg, tr);
@@ -888,10 +1003,10 @@ function status(msg, busy) { const el = $("status"); el.innerHTML = msg || ""; e
 let attribBusy = false, attribTimer = 0;
 async function requestAttrib() {
   if (attribBusy || !worker || S.walking) return;
-  attribBusy = true; const v = S.version, key = S.key, grp = S.group, gauge = S.gauge;
+  attribBusy = true; const v = S.version, key = wkey(), grp = S.group, gauge = S.gauge;
   const res = await lift(S.theta);
   attribBusy = false;
-  if (key !== S.key || grp !== S.group || gauge !== S.gauge) return requestAttrib();
+  if (key !== wkey() || grp !== S.group || gauge !== S.gauge) return requestAttrib();
   S.attrib = res; S.attribFor = v;
   updateGroupInfo(); markDirty(true);
   if (v !== S.version) requestAttribSoon();
@@ -902,13 +1017,15 @@ function requestAttribSoon() { clearTimeout(attribTimer); attribTimer = setTimeo
 function setGauge(g, silent) {
   if (S.walking) return;
   S.gauge = g; $("g-norm").setAttribute("aria-pressed", g === "norm"); $("g-raw").setAttribute("aria-pressed", g === "raw");
-  const why = { c6_wedge120: "In the normalised gauge the lift moves the parameters roughly 100 times further for the same effect. ", c6_wedge360: "" }[S.key] || "";
+  const why = { c6_wedge120: "In the normalised gauge the lift moves the parameters roughly 100 times further for the same effect. ",
+    spiral_wedge120: "In the normalised gauge this network's lifts are many times longer than θ itself, so even a step of 0.01 leaves the linear regime. ",
+    spiral_wedge360: "In the normalised gauge this network's lifts are about 20 times longer than θ itself, so even a step of 0.01 leaves the linear regime. " }[S.key] || "";
   $("gauge-hint").textContent = g === "raw" ? `Gauge: plain minimum-ℓ2 lift${SYS[S.key].gauge === "raw" ? " (the default for this system)" : ""}. ${why}` : "Gauge: sensitivity-normalised, as in the paper. The lift minimises Σ Sᵢ² cᵢ², which does not change when a parameter is rescaled.";
   $("coef-gauge").textContent = g === "raw" ? "raw ℓ2 gauge" : "normalised gauge";
   if (!silent) { S.version++; S.attrib = null; S.grpAttrib = null; markDirty(true); requestAttrib(); }
 }
 function lockControls(on) {
-  for (const id of ["w-go", "w-restore", "grp-kick", "grp-zero", "reset", "w-clear"]) $(id).disabled = on;
+  for (const id of ["w-go", "w-restore", "w-compare", "grp-kick", "grp-zero", "reset", "w-clear"]) $(id).disabled = on;
   $("w-stop").disabled = !on;
   document.querySelectorAll(".pickers button, #group-seg button, #g-norm, #g-raw, #free-all, #free-grp").forEach((b) => (b.disabled = on));
   $("alpha").disabled = on; $("sel-slider").disabled = on || S.sel < 0;
@@ -916,7 +1033,7 @@ function lockControls(on) {
 async function walk(opts = {}) {
   if (S.walking) return;
   const which = opts.which || S.which, mode = opts.mode || S.mode, free = opts.free || S.free, dt = opts.dt || S.dt, T = opts.T || S.T;
-  if (S.hist.length > 1) { S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect]), which: S.hist.which, mode: S.hist.mode }); if (S.runs.length > 4) S.runs.shift(); }
+  if (S.hist.length > 1) { S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss]), which: S.hist.which, mode: S.hist.mode }); if (S.runs.length > 4) S.runs.shift(); }
   S.walking = true; S.stop = false; lockControls(true);
   let mask = null;
   if (free === "group") {
@@ -925,7 +1042,7 @@ async function walk(opts = {}) {
   }
   const nSteps = Math.max(1, Math.round(T / dt));
   const d0 = updateReadouts();
-  S.hist = [{ t: 0, defect: d0, prof: profileAt(S.theta, averager(S.theta)) }];
+  S.hist = [{ t: 0, defect: d0, loss: lossOf(S.theta), prof: profileAt(S.theta, averager(S.theta)) }];
   Object.assign(S.hist, { which, mode, free });
   let v0 = null, plateau = false;
   const pgStart = opts.adaptive && which === "b" ? averager(S.theta.slice()) : null;
@@ -950,7 +1067,7 @@ async function walk(opts = {}) {
       if (!ok) { S.theta.set(base); break; }
       t += hk; h = Math.min(dt, hk * 1.5);
       S.version++;
-      S.hist.push({ t, defect: dNow, prof: profileAt(S.theta, averager(S.theta)) });
+      S.hist.push({ t, defect: dNow, loss: lossOf(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
       markDirty(true);
       if (opts.until && dNow <= opts.until * d0) break;
       // Plateau: less than a 10% drop over the last two units of t.
@@ -971,7 +1088,7 @@ async function walk(opts = {}) {
     for (let i = 0; i < S.theta.length; i++) S.theta[i] += dt * dir[i];
     S.version++;
     const dNow = stateFor(S.theta, S.group, false).defect;
-    S.hist.push({ t: k * dt, defect: dNow, prof: profileAt(S.theta, averager(S.theta)) });
+    S.hist.push({ t: k * dt, defect: dNow, loss: lossOf(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
     markDirty(true);
     if (opts.until && dNow <= opts.until * d0) break;
     await new Promise((r) => setTimeout(r, mode === "fixed" ? 40 : 0));
@@ -980,7 +1097,7 @@ async function walk(opts = {}) {
   const last = S.hist[S.hist.length - 1];
   let tail = "";
   if (pgStart && !S.stop) {
-    // How close the end point is to P_G f of the starting network (the target of the ideal flow).
+    // How close the end point is to P_ℰ f of the starting network (the target of the ideal flow).
     const cfg = SYS[S.key], two = cfg.kind !== "scalar", a = new Float64Array(2), b = new Float64Array(2);
     let e = 0, n2 = 0;
     for (let i = 1; i <= 20; i++) for (let j = 0; j < 48; j++) {
@@ -989,8 +1106,8 @@ async function walk(opts = {}) {
       else { const p = pgStart.pg(x, y); e += (S.sys.value(S.theta, x, y) - p) ** 2; n2 += p * p; }
     }
     const gap = 100 * Math.sqrt(e / n2);
-    tail = gap < 5 ? ` The network now computes P<sub>G</sub>f of where it started, to within ${gap.toFixed(1)}%.`
-      : ` The result is symmetric but ${gap.toFixed(0)}% away from P<sub>G</sub>f of where it started: the lift could not follow −δ exactly, so the walk also changed the symmetric part.`;
+    tail = gap < 5 ? ` The network now computes P<sub>ℰ</sub>f of where it started, to within ${gap.toFixed(1)}%.`
+      : ` The result is symmetric but ${gap.toFixed(0)}% away from P<sub>ℰ</sub>f of where it started: the lift could not follow −δ exactly, so the walk also changed the symmetric part.`;
   }
   status(S.stop ? "Stopped." : `${plateau ? "Levelled off" : "Done"} at t = ${last.t.toFixed(2)}: defect ${fmt(d0)} → ${fmt(last.defect)} (${(100 * last.defect / d0).toFixed(1)}% of the start).${tail}`);
   updateInspector(); updateGroupInfo(); markDirty(true); requestAttrib();
@@ -1015,21 +1132,35 @@ function bind() {
   pair("w-c", "w-b", (x) => (S.which = x ? "c" : "b"));
   pair("m-res", "m-fix", (x) => (S.mode = x ? "resolved" : "fixed"));
   pair("free-all", "free-grp", (x) => (S.free = x ? "all" : "group"));
+  pair("tr-defect", "tr-loss", (x) => { S.traceKind = x ? "defect" : "loss"; markDirty(); });
   $("g-norm").onclick = () => setGauge("norm"); $("g-raw").onclick = () => setGauge("raw");
   $("wT").oninput = (e) => { S.T = +e.target.value; $("wT-val").textContent = S.T.toFixed(1); };
   $("w-dt").onchange = (e) => { S.dt = +e.target.value; };
   $("w-go").onclick = () => walk();
   $("w-restore").onclick = () => {
-    if (S.gauge !== "norm") setGauge("norm");
+    const g = SYS[S.key].restoreGauge || "norm";
+    if (S.gauge !== g) setGauge(g);
     walk({ which: "b", mode: "resolved", free: "all", dt: 0.25, T: 12, until: 0.01, adaptive: true });
   };
   $("w-stop").onclick = () => { S.stop = true; };
+  $("w-compare").onclick = async () => {
+    if (S.walking) return;
+    const which = S.which, back = () => { S.theta = S.theta0.slice(); S.version++; S.attrib = null; updateInspector(); markDirty(true); };
+    S.runs = []; S.hist = []; back();
+    await walk({ which, mode: "fixed" });
+    if (S.stop) return;
+    S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss]), which, mode: "fixed" });
+    S.hist = []; back();
+    await walk({ which, mode: "resolved" });
+  };
   $("w-clear").onclick = () => { S.runs = []; S.hist = []; markDirty(); };
   $("r0").oninput = (e) => { S.r0 = +e.target.value; $("r0-val").textContent = "r = " + S.r0.toFixed(2); S.hist = []; markDirty(); };
   $("alpha").oninput = (e) => { S.alpha = +e.target.value; $("alpha-val").textContent = S.alpha.toFixed(2).replace("-", "−"); computeBase(); changed(); };
   $("lock-scale").onchange = (e) => { S.lock = e.target.checked; markDirty(); };
   $("show-probe").onchange = (e) => { S.probe = e.target.checked; markDirty(); };
   $("show-data").onchange = (e) => { S.data = e.target.checked; markDirty(); };
+  try { const c = localStorage.getItem("sll-colour"); if (c && [...$("colour-style").options].some((o) => o.value === c)) { S.colour = c; $("colour-style").value = c; } } catch (e) {}
+  $("colour-style").onchange = (e) => { S.colour = e.target.value; try { localStorage.setItem("sll-colour", S.colour); } catch (er) {} markDirty(); };
   const coefDefault = $("coef-ro").textContent;
   coefCv.addEventListener("mousemove", (e) => {
     const bb = coefCv.getBoundingClientRect(), p = pickCoef(e.clientX - bb.left, e.clientY - bb.top);
@@ -1057,7 +1188,7 @@ function bind() {
   fieldCv.addEventListener("mousemove", (e) => {
     const b = fieldCv.getBoundingClientRect(), x = -E + (2 * E * (e.clientX - b.left)) / b.width, y = E - (2 * E * (e.clientY - b.top)) / b.height;
     const v = S.sys.value(S.theta, x, y), m = S.lastDisplay ? S.lastDisplay.av.pg(x, y) : NaN, o = SYS[S.key].out, el = $("hover-ro");
-    el.hidden = false; el.textContent = `(${fmt(x)}, ${fmt(y)})  ${o} ${fmt(v)}  P_G ${o} ${fmt(m)}  δ ${fmt(v - m)}`;
+    el.hidden = false; el.textContent = `(${fmt(x)}, ${fmt(y)})  ${o} ${fmt(v)}  P_ℰ ${o} ${fmt(m)}  δ ${fmt(v - m)}`;
   });
   fieldCv.addEventListener("mouseleave", () => { $("hover-ro").hidden = true; });
   window.addEventListener("resize", () => markDirty(true));
@@ -1066,6 +1197,24 @@ function bind() {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", repal);
   new MutationObserver(repal).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 }
+
+// ------------------------------------------------------------------ loss-vs-defect table
+const FAM_NAME = { annulus: "Annulus classifier", mexican: "Mexican hat", sixfold: "Six-fold potential", spiral: "Spiral classifier", twobody: "Two-body" };
+function buildSummary() {
+  const keep = { key: S.key, net: S.net, sys: S.sys, theta: S.theta, score: SCORE }, rows = [];
+  for (const f of Object.keys(FAMS)) for (const k of FAMS[f].keys) {
+    const cfg = SYS[k]; S.key = k; S.net = C.makeNet(S.weights[k]); S.theta = S.net.theta;
+    S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
+    makeScoreSets();
+    const g = cfg.group ?? cfg.groups[0], [s1, s2] = scores();
+    rows.push({ k, f, g, label: cfg.label || (f === "mexican" ? "trajectories" : ""), loss: lossOf(S.theta), s1, s2, defect: stateFor(S.theta, g, false).defect });
+  }
+  S.key = keep.key; S.net = keep.net; S.sys = keep.sys; S.theta = keep.theta; SCORE = keep.score;
+  $("summary").tBodies[0].innerHTML = rows.map((r) => `<tr data-k="${r.k}"><td>${FAM_NAME[r.f]}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td class="n">${fmt(r.defect)} <small>${gName(r.g)}</small></td></tr>`).join("");
+  for (const tr of $("summary").tBodies[0].rows) tr.onclick = () => { if (S.walking) return; setSystem(tr.dataset.k); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  markSummary();
+}
+function markSummary() { for (const tr of $("summary").tBodies[0].rows) tr.classList.toggle("cur", tr.dataset.k === S.key); }
 
 // ------------------------------------------------------------------ boot
 (async function boot() {
@@ -1076,6 +1225,7 @@ function bind() {
   worker.postMessage({ cmd: "init", weights: S.weights });
   const start = Object.keys(SYS).find((q) => "#" + SYS[q].hash === location.hash) || "annulus_wedge90";
   setSystem(start, true);
+  setTimeout(buildSummary, 50);
 })();
 </script>
 </body>
