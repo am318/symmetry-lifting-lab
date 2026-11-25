@@ -74,8 +74,6 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var
 .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px }
 .ro .k { color: var(--muted); font-size: 12.5px; line-height: 1.25 }
 .ro[title] { cursor: help }
-kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--soft) }
-@media (hover: none) { .keys { display: none } }
 .ro[title] .k { text-decoration: underline dotted var(--line); text-underline-offset: 3px }
 .ro.on .k { color: var(--ink) }
 .ro .v { font-family: var(--f-mono); font-size: 1.12rem; font-variant-numeric: tabular-nums }
@@ -262,7 +260,6 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
           <button class="btn" id="w-stop" disabled>Stop</button>
         </div>
         <div class="row"><button class="btn" id="w-compare" title="From the trained weights, run a Fixed walk and then a Resolved walk in the chosen direction, and overlay both in the trace (as in the paper's figures)">Resolved vs Fixed</button><span class="hint">from the trained weights, to the t in the settings</span></div>
-        <p class="hint keys">Keys: <kbd>W</kbd> walk · <kbd>R</kbd> restore · <kbd>Esc</kbd> stop · <kbd>C</kbd> / <kbd>B</kbd> direction · <kbd>0</kbd> reset weights</p>
         <div class="status" id="status"></div>
         <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true">equivariance defect</button><button id="tr-loss" aria-pressed="false">training loss</button><button id="tr-fit" aria-pressed="false" title="Accuracy (classifiers) or error against the true field (regressions) along the walk: solid over the whole domain, dotted on the training region">fit</button><button id="tr-plane" aria-pressed="false" title="Each walk as a path in the plane of equivariance defect (across) and training loss (up): the start is the hollow circle">loss vs defect</button></div></div>
         <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
@@ -1232,12 +1229,6 @@ function updateInspector() {
 function changed() { S.version++; S.hist = []; markDirty(true); requestAttribSoon(); }
 
 function bind() {
-  document.addEventListener("keydown", (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input, select, textarea")) return;
-    const k = e.key.toLowerCase(), click = (id) => { const b = $(id); if (b && !b.disabled) { b.click(); e.preventDefault(); } };
-    if (k === "w") click("w-go"); else if (k === "r") click("w-restore"); else if (k === "escape") click("w-stop");
-    else if (k === "c") click("w-c"); else if (k === "b") click("w-b"); else if (k === "0") click("reset");
-  });
   for (const ro of document.querySelectorAll(".ro[title]")) {
     const show = () => { $("ro-help").textContent = ro.title; for (const o of document.querySelectorAll(".ro")) o.classList.toggle("on", o === ro); };
     ro.addEventListener("click", show); ro.addEventListener("mouseenter", show);
