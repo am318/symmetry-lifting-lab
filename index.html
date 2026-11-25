@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Symmetry Lifting Lab</title>
+<meta name="description" content="Walk a trained network's weights along the symmetry orbit or towards the symmetric functions and watch its output field change.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: instrument bench. Network and parameter groups on the left, the field large in the middle, readouts and walks on the right. */
+:root {
+  --bg: #f3f4f6; --panel: #ffffff; --ink: #172026; --muted: #5b6770; --line: #d9dde2;
+  --accent: #2f4fd6; --accent-soft: #e4e9fb;
+  --neg: #12707e; --mid: #f7f5f0; --pos: #b4532a; --seq0: #f7f5f0; --seq1: #29365f;
+  --good: #2b7a4b; --warn: #a0620c;
+  --f-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1418; --panel: #171e24; --ink: #e6eaee; --muted: #93a0aa; --line: #2a343c;
+  --accent: #8da2ff; --accent-soft: #232c4a;
+  --neg: #3fb3c2; --mid: #1b2228; --pos: #e58a5c; --seq0: #1b2228; --seq1: #c9d3ff;
+  --good: #5fc48a; --warn: #e0a548; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1418; --panel: #171e24; --ink: #e6eaee; --muted: #93a0aa; --line: #2a343c;
+  --accent: #8da2ff; --accent-soft: #232c4a;
+  --neg: #3fb3c2; --mid: #1b2228; --pos: #e58a5c; --seq0: #1b2228; --seq1: #c9d3ff;
+  --good: #5fc48a; --warn: #e0a548; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px }
+.wrap { max-width: 1340px; margin: 0 auto; display: grid; gap: 16px }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px }
+h1 { font-family: var(--f-display); font-weight: 600; font-size: 1.6rem; margin: 0; letter-spacing: -0.01em }
+.sub { color: var(--muted); margin: 2px 0 0; max-width: 72ch }
+h2 { font-family: var(--f-display); font-weight: 500; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel) }
+.seg button { font: inherit; border: 0; background: transparent; color: var(--ink); padding: 7px 12px; cursor: pointer; border-right: 1px solid var(--line) }
+.seg button:last-child { border-right: 0 }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel) }
+.seg button:disabled { opacity: 0.45; cursor: default }
+.seg.small button { padding: 4px 9px; font-size: 12.5px }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.pickers { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.grid { display: grid; grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(270px, 330px); gap: 16px; align-items: start }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; display: grid; gap: 8px; align-content: start }
+.stack { display: grid; gap: 16px; min-width: 0 }
+canvas { display: block; max-width: 100% }
+.fieldwrap { position: relative; width: 100%; max-width: 600px; margin: 0 auto }
+#field { width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; cursor: crosshair; touch-action: none }
+#hover-ro { position: absolute; left: 8px; top: 8px; font-family: var(--f-mono); font-size: 11.5px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; pointer-events: none; font-variant-numeric: tabular-nums }
+#net { width: 100%; height: 380px; cursor: pointer }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.between { justify-content: space-between }
+label, .lbl { color: var(--muted); font-size: 12.5px }
+.check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12.5px; cursor: pointer }
+.check input { accent-color: var(--accent) }
+input[type="range"] { width: 100%; accent-color: var(--accent) }
+select { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink) }
+.btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 6px 11px; cursor: pointer }
+.btn.primary { background: var(--accent); color: var(--panel); border-color: var(--accent) }
+.btn:disabled { opacity: 0.5; cursor: default }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+.readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px }
+.ro .k { color: var(--muted); font-size: 12px }
+.ro .v { font-family: var(--f-mono); font-size: 1.1rem; font-variant-numeric: tabular-nums }
+.ro .v small { font-size: 0.72rem; color: var(--muted) }
+.ladder { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums }
+.ladder .bar { height: 8px; border-radius: 4px; background: var(--accent-soft); position: relative; overflow: hidden }
+.ladder .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px }
+.ladder .sel { color: var(--accent); font-weight: 500 }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--f-mono) }
+.legend canvas { height: 10px; width: 140px; border-radius: 3px }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0 }
+.name { font-family: var(--f-mono); font-size: 12.5px }
+.sep { border-top: 1px solid var(--line); margin: 4px 0 }
+.status { font-size: 12.5px; color: var(--muted); min-height: 1.4em }
+.status.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 6px; animation: pulse 1s infinite }
+@keyframes pulse { 50% { opacity: 0.25 } }
+@media (prefers-reduced-motion: reduce) { .status.busy::before { animation: none } }
+svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
+.about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px }
+.about p { margin: 0 0 8px; max-width: 65ch }
+.about h3 { font-family: var(--f-display); font-weight: 500; font-size: 1rem; margin: 0 0 6px }
+.math { font-family: var(--f-mono); font-size: 0.92em }
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) } .center { grid-column: 1 / -1; order: -1 } }
+@media (max-width: 720px) { .grid { grid-template-columns: minmax(0, 1fr) } #net { height: 300px } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Symmetry Lifting Lab</h1>
+      <p class="sub">Move a trained network's weights and watch the symmetry of what it computes. Walk along <span class="math">c*</span> to rotate the learned function along its symmetry orbit, or along <span class="math">b*</span> to push it towards the symmetric functions.</p>
+    </div>
+    <div class="pickers">
+      <div class="seg" role="group" aria-label="System">
+        <button id="fam-annulus" aria-pressed="true">Annulus classifier</button>
+        <button id="fam-mexican" aria-pressed="false">Mexican hat</button>
+        <button id="fam-sixfold" aria-pressed="false">Six-fold potential</button>
+      </div>
+      <div class="seg" role="group" aria-label="Training data" id="data-seg"></div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- left: network and parameter groups -->
+    <div class="stack">
+      <section class="panel">
+        <div class="row between"><h2>Network</h2>
+          <div class="seg small" role="group" aria-label="Edge colour">
+            <button id="cm-weight" aria-pressed="true" title="Weight value">θ</button>
+            <button id="cm-sens" aria-pressed="false" title="Aggregate sensitivity S_i">S</button>
+            <button id="cm-c" aria-pressed="false" title="|c*_i|: lift of the rotation generator">c*</button>
+            <button id="cm-b" aria-pressed="false" title="|b*_i|: lift of the direction towards symmetry">b*</button>
+          </div>
+        </div>
+        <canvas id="net" aria-label="Network diagram: click an edge or a unit to select that weight or bias"></canvas>
+        <p class="hint" id="cm-hint"></p>
+      </section>
+
+      <section class="panel" id="groups">
+        <h2>Perturb parameters</h2>
+        <div class="name" id="sel-name">One parameter: click an edge or a unit.</div>
+        <div class="row between" id="sel-row" hidden><span class="lbl">value</span><span class="num" id="sel-val">–</span></div>
+        <input type="range" id="sel-slider" min="-1" max="1" step="0.001" value="0" disabled aria-label="Selected parameter value">
+        <div class="sep"></div>
+        <div class="row between"><label for="grp-rule">Parameter group</label>
+          <select id="grp-rule">
+            <option value="topb">top k by |b*ᵢ|</option>
+            <option value="topc">top k by |c*ᵢ|</option>
+            <option value="tops">top k by Sᵢ</option>
+            <option value="bias">all biases</option>
+          </select>
+        </div>
+        <div id="k-row"><div class="row between"><label for="grp-k">k</label><span class="num" id="grp-k-val">40</span></div>
+          <input type="range" id="grp-k" min="0" max="1000" step="1" value="500"></div>
+        <div class="hint" id="grp-info">–</div>
+        <label class="check"><input type="checkbox" id="grp-show" checked> highlight on the network</label>
+        <div class="row between"><label for="kick-size">kick size, % of ‖θ‖</label><span class="num" id="kick-val">1.0%</span></div>
+        <input type="range" id="kick-size" min="0.1" max="5" step="0.1" value="1">
+        <div class="row">
+          <button class="btn" id="grp-kick" title="Add Gaussian noise to the group only">Kick group</button>
+          <button class="btn" id="grp-zero" title="Set every parameter in the group to zero">Zero group</button>
+          <button class="btn" id="reset">Reset to trained</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- centre: field -->
+    <section class="panel center">
+      <div class="row between">
+        <h2 id="field-title">Logit field</h2>
+        <div class="row">
+          <div class="seg small" role="group" aria-label="Symmetry group" id="group-seg"></div>
+          <div class="seg small" role="group" aria-label="Field view">
+            <button id="v-f" aria-pressed="true">f</button>
+            <button id="v-pe" aria-pressed="false">P<sub>G</sub> f</button>
+            <button id="v-delta" aria-pressed="false">δ = f − P<sub>G</sub> f</button>
+          </div>
+        </div>
+      </div>
+      <div class="fieldwrap">
+        <canvas id="field" aria-label="Output field of the network over the plane"></canvas>
+        <div id="hover-ro" hidden></div>
+      </div>
+      <div class="row between">
+        <div class="legend"><span id="lg-lo">–</span><canvas id="lg-bar" width="140" height="10"></canvas><span id="lg-hi">–</span></div>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="lock-scale" checked> lock colours to the trained network</label>
+          <label class="check"><input type="checkbox" id="show-probe"> show probe</label>
+        </div>
+      </div>
+      <div class="row" id="alpha-row" hidden>
+        <label for="alpha">stiffness α</label><input type="range" id="alpha" min="-1.1" max="1.1" step="0.05" value="-0.5" style="flex:1;width:auto"><span class="num" id="alpha-val">−0.50</span>
+      </div>
+      <p class="hint" id="field-hint"></p>
+    </section>
+
+    <!-- right: readouts, profile, walk -->
+    <div class="stack">
+      <section class="panel">
+        <h2>Readouts</h2>
+        <div class="readouts">
+          <div class="ro"><div class="k" id="ro-defect-k">defect ‖δ‖ / ‖f‖</div><div class="v" id="ro-defect">–</div></div>
+          <div class="ro"><div class="k">moved ‖θ − θ₀‖ / ‖θ₀‖</div><div class="v" id="ro-dist">–</div></div>
+          <div class="ro"><div class="k" id="ro-s1-k">–</div><div class="v" id="ro-s1">–</div></div>
+          <div class="ro" id="ro-s2-box"><div class="k" id="ro-s2-k">–</div><div class="v" id="ro-s2">–</div></div>
+          <div class="ro"><div class="k">lift residual c* / b*</div><div class="v" id="ro-res">–</div></div>
+          <div class="ro"><div class="k">resolved rank of J</div><div class="v" id="ro-rank">–</div></div>
+        </div>
+        <div id="ladder-box" hidden>
+          <div class="lbl" style="margin:4px 0">defect for each symmetry group</div>
+          <div class="ladder" id="ladder"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="row between"><h2 id="prof-title">Angular profile of δ</h2><span class="num" id="r0-val" style="font-size:12px;color:var(--muted)">r = 0.50</span></div>
+        <svg id="profile" viewBox="0 0 300 170" width="100%" role="img" aria-label="Defect against angle at a fixed radius"></svg>
+        <input type="range" id="r0" min="0.1" max="1" step="0.01" value="0.5" aria-label="Profile radius">
+        <p class="hint">Solid: the walk so far, from dark (start) to orange (latest). Dotted: the ideal function-space flow at the latest t.</p>
+      </section>
+      <section class="panel">
+        <h2>Walk in parameter space</h2>
+        <div class="row">
+          <div class="seg small" role="group" aria-label="Direction"><button id="w-c" aria-pressed="false">along c*</button><button id="w-b" aria-pressed="true">along b*</button></div>
+          <div class="seg small" role="group" aria-label="Mode"><button id="m-res" aria-pressed="true">resolved</button><button id="m-fix" aria-pressed="false">fixed</button></div>
+        </div>
+        <div class="row">
+          <div class="seg small" role="group" aria-label="Free parameters"><button id="free-all" aria-pressed="true">all parameters free</button><button id="free-grp" aria-pressed="false">only the group</button></div>
+          <div class="seg small" role="group" aria-label="Gauge"><button id="g-norm" aria-pressed="true" title="Minimise the sensitivity-weighted norm, as in the paper">normalised</button><button id="g-raw" aria-pressed="false" title="Plain minimum-ℓ2-norm lift">raw ℓ2</button></div>
+        </div>
+        <div class="row between"><label for="wT">run to t =</label><span class="num" id="wT-val">1.0</span></div>
+        <input type="range" id="wT" min="0.2" max="8" step="0.1" value="1">
+        <div class="row between"><label for="w-dt">Euler step Δt</label>
+          <select id="w-dt"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option></select></div>
+        <div class="row">
+          <button class="btn primary" id="w-go">Walk</button>
+          <button class="btn" id="w-restore" title="Resolved b* with all parameters free, in the normalised gauge, with a step-size check, until the defect is 1% of where it started">Restore symmetry</button>
+          <button class="btn" id="w-stop" disabled>Stop</button>
+          <button class="btn" id="w-clear">Clear runs</button>
+        </div>
+        <p class="hint" id="gauge-hint"></p>
+        <div class="status" id="status"></div>
+        <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel about">
+    <div>
+      <h3>What you are looking at</h3>
+      <p>Each system is a trained network <span class="math">f<sub>θ</sub></span> on the plane. A symmetry group <span class="math">G</span> of rotations acts on the inputs, and on the outputs when they are vectors. The Reynolds average <span class="math">P<sub>G</sub>f</span> averages <span class="math">f</span> over <span class="math">G</span>: a 64-point quadrature for <span class="math">SO(2)</span>, an exact average over the <span class="math">n</span> rotations for <span class="math">C<sub>n</sub></span>. The defect is <span class="math">δ = f − P<sub>G</sub>f</span>.</p>
+      <p>The orbit direction <span class="math">η = dΠ(ξ)f</span> rotates the function infinitesimally. It is orthogonal to <span class="math">δ</span>, so moving along it changes where the function points, not how symmetric it is.</p>
+    </div>
+    <div>
+      <h3>The two directions</h3>
+      <p><span class="math">c* = J<sup>+</sup>η</span> and <span class="math">b* = J<sup>+</sup>(−δ)</span>. <span class="math">J</span> is the Jacobian of the outputs on a polar probe with respect to the parameters. <span class="math">J<sup>+</sup></span> is truncated at <span class="math">σ<sub>k</sub> ≥ 10<sup>−3</sup>σ<sub>1</sub></span>, and the minimum norm is taken in the sensitivity-normalised gauge (or plain ℓ2, by the switch). The lift residual is the part of the target the parameters cannot reach locally.</p>
+      <p><b>Resolved</b> walks recompute the direction at every Euler step, <b>fixed</b> walks reuse the first one. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
+    </div>
+    <div>
+      <h3>Systems</h3>
+      <p><b>Annulus classifier</b>: an MLP (width 32, depth 3, SiLU) separating a disc (<span class="math">r &lt; 0.4</span>) from an annulus (<span class="math">0.6 &lt; r &lt; 1</span>), trained on a 90° wedge or on all angles. Probe: 15 radii × 32 angles.</p>
+      <p><b>Mexican hat</b>: the potential network of an ASRNN trained on trajectories of <span class="math">H = ½‖p‖² + ½α‖q‖² + ¼‖q‖⁴</span>. The field is the learned force <span class="math">−∇<sub>q</sub>V</span>. Here the lift uses 8 radii × 32 angles at the displayed α only (the paper pools rows across α).</p>
+      <p><b>Six-fold potential</b>: the same MLP regressing <span class="math">V = r⁴ − 1.2r² + 0.25r⁶cos 6φ</span>, trained on a 120° wedge or on the whole disc. Choose <span class="math">C₂, C₃, C₆</span> or <span class="math">SO(2)</span> as the target symmetry. Probe: 15 radii × 48 angles, closed under every <span class="math">C<sub>n</sub></span> used.</p>
+      <p class="hint">Method from <i>Parameter-Level Attribution of Symmetry in Trained Networks</i> (NeurReps 2026). Everything is computed live in your browser, in float64.</p>
+    </div>
+  </section>
+</div>
+
+<script src="core.js"></script>
+<script>
+"use strict";
+const C = window.SymCore;
+const $ = (id) => document.getElementById(id);
+const E = 1.15;   // display half-width
+const G = 80;     // heatmap resolution
+const SUB = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
+const gName = (n) => (n === 0 ? "SO(2)" : "C" + SUB[n]);
+const tgtC6 = (x, y) => { const r2 = x * x + y * y, p = Math.atan2(y, x); return r2 * r2 - 1.2 * r2 + 0.25 * r2 * r2 * r2 * Math.cos(6 * p); };
+
+const FAMS = {
+  annulus: { keys: ["annulus_wedge90", "annulus_wedge360"] },
+  mexican: { keys: ["mexican_hat"] },
+  sixfold: { keys: ["c6_wedge120", "c6_wedge360"] },
+};
+const SYS = {
+  annulus_wedge90: { fam: "annulus", hash: "annulus-90", label: "90° wedge", kind: "scalar", wedge: 90, probe: [15, 32], groups: [0], gauge: "norm",
+    inputs: ["x", "y"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", seq: false },
+  annulus_wedge360: { fam: "annulus", hash: "annulus-360", label: "all angles", kind: "scalar", wedge: 360, probe: [15, 32], groups: [0], gauge: "norm",
+    inputs: ["x", "y"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", seq: false },
+  mexican_hat: { fam: "mexican", hash: "mexican-hat", label: "", kind: "force", probe: [8, 32], groups: [0], gauge: "norm",
+    inputs: ["q₁", "q₂", "α"], out: "V", r0: 0.8, title: "Learned potential V and force −∇V", circles: [1], score: "force", seq: true },
+  c6_wedge120: { fam: "sixfold", hash: "sixfold-120", label: "120° wedge", kind: "scalar", wedge: 120, probe: [15, 48], groups: [2, 3, 6, 0], group: 6, gauge: "raw",
+    inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", seq: false },
+  c6_wedge360: { fam: "sixfold", hash: "sixfold-360", label: "whole disc", kind: "scalar", wedge: 360, probe: [15, 48], groups: [2, 3, 6, 0], group: 6, gauge: "raw",
+    inputs: ["x", "y"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", seq: false },
+};
+const S = {
+  key: null, weights: null, net: null, sys: null, theta0: null, theta: null, alpha: -0.5, group: 0,
+  view: "f", cmode: "weight", sel: -1, attrib: null, attribFor: -1, version: 0, grpAttrib: null, grpFor: "",
+  which: "b", mode: "resolved", free: "all", gauge: "norm", T: 1, dt: 0.1, walking: false, stop: false,
+  hist: [], runs: [], base: null, profBase: null, r0: 0.5, hover: -1, lock: true, probe: false,
+};
+let worker = null, liftId = 0;
+const pending = new Map();
+
+// ------------------------------------------------------------------ colours
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function hexRgb(h) { h = h.replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+let PAL = null;
+function readPalette() {
+  PAL = { neg: hexRgb(cssVar("--neg")), mid: hexRgb(cssVar("--mid")), pos: hexRgb(cssVar("--pos")), s0: hexRgb(cssVar("--seq0")), s1: hexRgb(cssVar("--seq1")),
+    ink: cssVar("--ink"), muted: cssVar("--muted"), line: cssVar("--line"), accent: cssVar("--accent"), panel: cssVar("--panel"), posH: cssVar("--pos"), negH: cssVar("--neg") };
+}
+const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const diverge = (u) => { u = Math.max(-1, Math.min(1, u)); return u < 0 ? lerp(PAL.mid, PAL.neg, Math.pow(-u, 0.8)) : lerp(PAL.mid, PAL.pos, Math.pow(u, 0.8)); };
+const sequential = (u) => lerp(PAL.s0, PAL.s1, Math.max(0, Math.min(1, u)));
+const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const fmt = (v) => { if (!isFinite(v)) return "–"; const a = Math.abs(v); return (a !== 0 && (a < 1e-2 || a >= 1e3) ? v.toExponential(1) : v.toFixed(a < 1 ? 3 : 1)).replace("-", "−"); };
+
+// ------------------------------------------------------------------ system set-up
+function setSystem(key, fromHash) {
+  if (S.walking) return;
+  S.key = key; const cfg = SYS[key];
+  S.net = C.makeNet(S.weights[key]);
+  S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
+  S.theta0 = S.net.theta.slice(); S.theta = S.theta0.slice();
+  S.sel = -1; S.attrib = null; S.grpAttrib = null; S.hist = []; S.runs = []; S.r0 = cfg.r0; S.version++;
+  S.group = cfg.group ?? cfg.groups[0];
+  $("r0").value = S.r0; $("r0-val").textContent = "r = " + S.r0.toFixed(2);
+  for (const f of Object.keys(FAMS)) $("fam-" + f).setAttribute("aria-pressed", f === cfg.fam);
+  const ds = $("data-seg"); ds.innerHTML = ""; ds.hidden = FAMS[cfg.fam].keys.length < 2;
+  for (const k of FAMS[cfg.fam].keys) { const b = document.createElement("button"); b.textContent = SYS[k].label; b.setAttribute("aria-pressed", k === key); b.onclick = () => setSystem(k); ds.appendChild(b); }
+  const gs = $("group-seg"); gs.innerHTML = ""; gs.hidden = cfg.groups.length < 2;
+  for (const n of cfg.groups) { const b = document.createElement("button"); b.textContent = gName(n); b.id = "grp-" + n; b.setAttribute("aria-pressed", n === S.group); b.onclick = () => setGroup(n); gs.appendChild(b); }
+  $("alpha-row").hidden = cfg.kind !== "force";
+  $("field-title").textContent = cfg.title;
+  const isV = cfg.out === "V";
+  $("v-f").textContent = cfg.out; $("v-pe").innerHTML = `P<sub>G</sub> ${cfg.out}`; $("v-delta").innerHTML = `δ = ${cfg.out} − P<sub>G</sub> ${cfg.out}`;
+  $("field-hint").textContent = {
+    annulus: (cfg.wedge < 360 ? "Shaded sector: the 90° wedge the classifier was trained on. " : "") + "Black line: decision boundary f = 0. Dashed circles: r = 0.4, 0.6, 1. Blue dotted circle: the profile radius.",
+    mexican: "Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc, r ≤ 1. Blue dotted circle: the profile radius.",
+    sixfold: (cfg.wedge < 360 ? "Shaded sector: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Blue dotted circle: the profile radius.",
+  }[cfg.fam];
+  $("ro-s1-k").textContent = { acc: "accuracy, all angles", force: "force error vs true", fit: "error vs true V, whole disc" }[cfg.score];
+  $("ro-s2-k").textContent = { acc: "accuracy, training wedge", fit: "error vs true V, training wedge", force: "" }[cfg.score];
+  $("ro-s2-box").hidden = cfg.score === "force" || cfg.wedge === 360;
+  $("ladder-box").hidden = cfg.groups.length < 2;
+  setGauge(cfg.gauge, true);
+  makeScoreSets();
+  computeBase();
+  updateInspector(); updateGroupInfo();
+  if (!fromHash) { try { history.replaceState(null, "", "#" + cfg.hash); } catch (e) { location.hash = cfg.hash; } }
+  markDirty(true); requestAttrib();
+}
+function setGroup(n) {
+  if (S.walking) return;
+  S.group = n; for (const b of $("group-seg").children) b.setAttribute("aria-pressed", b.id === "grp-" + n);
+  S.hist = []; S.runs = []; S.version++; S.attrib = null; S.grpAttrib = null; computeBase(); markDirty(true); requestAttrib();
+}
+function computeBase() {
+  const d = displayData(S.theta0);
+  S.base = { fMax: d.fMax, dMax: d.dMax, vMin: d.vMin, vMax: d.vMax, qMax: d.qMax, qdMax: d.qdMax };
+  S.profBase = null;
+}
+
+// ------------------------------------------------------------------ group averages for display
+function ringMeans(th, nR, rMax) {
+  const NQ = 64, isF = SYS[S.key].kind === "force", t = new Float64Array(2);
+  const sm = new Float64Array(nR + 1), rad = new Float64Array(nR + 1), tan = new Float64Array(nR + 1);
+  for (let i = 0; i <= nR; i++) {
+    const r = (rMax * i) / nR; let s = 0, a0 = 0, a1 = 0;
+    for (let k = 0; k < NQ; k++) {
+      const a = (2 * Math.PI * k) / NQ, c = Math.cos(a), sn = Math.sin(a);
+      s += S.sys.value(th, r * c, r * sn);
+      if (isF) { S.sys.field(th, r * c, r * sn, t); a0 += c * t[0] + sn * t[1]; a1 += -sn * t[0] + c * t[1]; }
+    }
+    sm[i] = s / NQ; rad[i] = a0 / NQ; tan[i] = a1 / NQ;
+  }
+  const at = (arr, r) => { const u = (r / rMax) * nR, i = Math.min(nR - 1, Math.floor(u)), w = u - i; return arr[i] * (1 - w) + arr[i + 1] * w; };
+  return { mean: (r) => at(sm, r), rad: (r) => at(rad, r), tan: (r) => at(tan, r) };
+}
+// returns pg(x, y) for the network value and pgF(x, y, out) for the force (force system only)
+function averager(th) {
+  const n = S.group;
+  if (n === 0) {
+    const rm = ringMeans(th, 120, E * Math.SQRT2 + 0.01);
+    return {
+      pg: (x, y) => rm.mean(Math.hypot(x, y)),
+      pgF: (x, y, out) => { const r = Math.hypot(x, y), c = r > 0 ? x / r : 1, s = r > 0 ? y / r : 0, fr = rm.rad(r), ft = rm.tan(r); out[0] = c * fr - s * ft; out[1] = s * fr + c * ft; },
+    };
+  }
+  const cs = [], sn = [];
+  for (let k = 0; k < n; k++) { cs.push(Math.cos((2 * Math.PI * k) / n)); sn.push(Math.sin((2 * Math.PI * k) / n)); }
+  const t = new Float64Array(2);
+  return {
+    pg: (x, y) => { let s = 0; for (let k = 0; k < n; k++) s += S.sys.value(th, cs[k] * x - sn[k] * y, sn[k] * x + cs[k] * y); return s / n; },
+    pgF: (x, y, out) => { out[0] = 0; out[1] = 0; for (let k = 0; k < n; k++) { S.sys.field(th, cs[k] * x - sn[k] * y, sn[k] * x + cs[k] * y, t); out[0] += cs[k] * t[0] + sn[k] * t[1]; out[1] += -sn[k] * t[0] + cs[k] * t[1]; } out[0] /= n; out[1] /= n; },
+  };
+}
+function displayData(th) {
+  const isF = SYS[S.key].kind === "force", av = averager(th);
+  const val = new Float64Array(G * G), pe = new Float64Array(G * G);
+  let fMax = 0, dMax = 0, vMin = Infinity, vMax = -Infinity;
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+    const x = -E + (2 * E * (i + 0.5)) / G, y = E - (2 * E * (j + 0.5)) / G, r = Math.hypot(x, y), n = j * G + i;
+    const v = S.sys.value(th, x, y), m = av.pg(x, y);
+    val[n] = v; pe[n] = m;
+    if (r <= 1) { fMax = Math.max(fMax, Math.abs(v)); dMax = Math.max(dMax, Math.abs(v - m)); vMin = Math.min(vMin, v); vMax = Math.max(vMax, v); }
+  }
+  let arrows = null, qMax = 0, qdMax = 0;
+  if (isF) {
+    arrows = []; const nA = 15, t = new Float64Array(2), p = new Float64Array(2);
+    for (let j = 0; j < nA; j++) for (let i = 0; i < nA; i++) {
+      const x = -E + (2 * E * (i + 0.5)) / nA, y = -E + (2 * E * (j + 0.5)) / nA;
+      if (Math.hypot(x, y) > 1.08) continue;
+      S.sys.field(th, x, y, t); av.pgF(x, y, p);
+      arrows.push({ x, y, fx: t[0], fy: t[1], dx: t[0] - p[0], dy: t[1] - p[1] });
+      qMax = Math.max(qMax, Math.hypot(t[0], t[1])); qdMax = Math.max(qdMax, Math.hypot(t[0] - p[0], t[1] - p[1]));
+    }
+  }
+  return { val, pe, fMax, dMax, vMin, vMax, arrows, qMax, qdMax, av };
+}
+
+// ------------------------------------------------------------------ field rendering
+const fieldCv = $("field"), off = document.createElement("canvas"); off.width = G; off.height = G;
+function sizeCanvas(cv, h) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, hh = h || cv.clientHeight || w;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(hh * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(hh * dpr); }
+  return { w, h: hh, dpr };
+}
+function drawField(d) {
+  const cfg = SYS[S.key], b = S.lock ? S.base : d;
+  const img = off.getContext("2d").createImageData(G, G);
+  for (let n = 0; n < G * G; n++) {
+    const v = d.val[n], m = d.pe[n];
+    let col;
+    if (S.view === "delta") col = diverge((v - m) / (b.dMax || 1));
+    else { const q = S.view === "pe" ? m : v; col = cfg.seq ? sequential((q - b.vMin) / (b.vMax - b.vMin || 1)) : diverge(q / (b.fMax || 1)); }
+    img.data[4 * n] = col[0]; img.data[4 * n + 1] = col[1]; img.data[4 * n + 2] = col[2]; img.data[4 * n + 3] = 255;
+  }
+  off.getContext("2d").putImageData(img, 0, 0);
+  const div = S.view === "delta" || !cfg.seq;
+  drawLegend(S.view === "delta" ? -b.dMax : cfg.seq ? b.vMin : -b.fMax, S.view === "delta" ? b.dMax : cfg.seq ? b.vMax : b.fMax, div);
+
+  const { w, dpr } = sizeCanvas(fieldCv), ctx = fieldCv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(off, 0, 0, w, w);
+  const X = (x) => ((x + E) / (2 * E)) * w, Y = (y) => ((E - y) / (2 * E)) * w, R = (r) => (r / (2 * E)) * w;
+  const ink = hexRgb(PAL.ink);
+  if (cfg.wedge && cfg.wedge < 360) {
+    const a = (cfg.wedge * Math.PI) / 180;
+    ctx.fillStyle = rgb(ink, 0.08); ctx.strokeStyle = rgb(ink, 0.4); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.arc(X(0), Y(0), R(1), 0, -a, true); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = rgb(ink, 0.45); ctx.lineWidth = 1;
+  cfg.circles.forEach((r) => { ctx.beginPath(); ctx.arc(X(0), Y(0), R(r), 0, 2 * Math.PI); ctx.stroke(); });
+  ctx.setLineDash([2, 3]); ctx.strokeStyle = PAL.accent; ctx.globalAlpha = 0.8;
+  ctx.beginPath(); ctx.arc(X(0), Y(0), R(S.r0), 0, 2 * Math.PI); ctx.stroke();
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  if (cfg.fam === "annulus" && S.view !== "delta") contour(ctx, S.view === "pe" ? d.pe : d.val, w);
+  if (S.probe) {
+    const [nR, nA] = cfg.probe; ctx.fillStyle = rgb(ink, 0.55);
+    for (let i = 1; i <= nR; i++) for (let j = 0; j < nA; j++) { const r = i / nR, a = (2 * Math.PI * j) / nA; ctx.fillRect(X(r * Math.cos(a)) - 1, Y(r * Math.sin(a)) - 1, 2, 2); }
+  }
+  if (d.arrows) {
+    const sc = (0.85 / 15) * w, useD = S.view === "delta", mx = useD ? b.qdMax : b.qMax;
+    ctx.strokeStyle = PAL.ink; ctx.fillStyle = PAL.ink; ctx.lineWidth = 1.2;
+    for (const a of d.arrows) {
+      const vx = useD ? a.dx : a.fx, vy = useD ? a.dy : a.fy, m = Math.hypot(vx, vy);
+      if (m < 1e-12) continue;
+      const len = Math.min(1.6, m / (mx || 1)) * sc, ux = vx / m, uy = vy / m, x0 = X(a.x), y0 = Y(a.y), x1 = x0 + ux * len, y1 = y0 - uy * len;
+      ctx.globalAlpha = 0.35 + 0.6 * Math.min(1, m / (mx || 1));
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      const hl = Math.min(5, len * 0.4);
+      ctx.beginPath(); ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - hl * (ux * 0.9 - uy * 0.5), y1 + hl * (uy * 0.9 + ux * 0.5));
+      ctx.lineTo(x1 - hl * (ux * 0.9 + uy * 0.5), y1 + hl * (uy * 0.9 - ux * 0.5)); ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  S.lastDisplay = d;
+}
+function contour(ctx, F, w) {
+  const cell = w / G; ctx.strokeStyle = PAL.ink; ctx.lineWidth = 1.8; ctx.beginPath();
+  const at = (i, j) => F[j * G + i];
+  for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
+    const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)], pts = [];
+    const P = [[i + 0.5, j + 0.5], [i + 1.5, j + 0.5], [i + 1.5, j + 1.5], [i + 0.5, j + 1.5]];
+    const edge = (a, b) => { if ((v[a] > 0) !== (v[b] > 0)) { const t = v[a] / (v[a] - v[b]); pts.push([P[a][0] + (P[b][0] - P[a][0]) * t, P[a][1] + (P[b][1] - P[a][1]) * t]); } };
+    edge(0, 1); edge(1, 2); edge(2, 3); edge(3, 0);
+    for (let k = 0; k + 1 < pts.length; k += 2) { ctx.moveTo(pts[k][0] * cell, pts[k][1] * cell); ctx.lineTo(pts[k + 1][0] * cell, pts[k + 1][1] * cell); }
+  }
+  ctx.stroke();
+}
+function drawLegend(lo, hi, div) {
+  const cv = $("lg-bar"), ctx = cv.getContext("2d");
+  for (let i = 0; i < cv.width; i++) { const u = i / (cv.width - 1); ctx.fillStyle = rgb(div ? diverge(2 * u - 1) : sequential(u)); ctx.fillRect(i, 0, 1, cv.height); }
+  $("lg-lo").textContent = fmt(lo); $("lg-hi").textContent = fmt(hi);
+}
+
+// ------------------------------------------------------------------ angular profile
+function profileAt(th, av) {
+  const n = 144, out = new Float64Array(n + 1);
+  for (let k = 0; k <= n; k++) { const a = (2 * Math.PI * k) / n, x = S.r0 * Math.cos(a), y = S.r0 * Math.sin(a); out[k] = S.sys.value(th, x, y) - av.pg(x, y); }
+  return out;
+}
+function drawProfile(cur) {
+  const svg = $("profile"), W = 300, H = 170, l = 40, r = 8, t = 8, bt = 22;
+  if (!S.profBase || S.profBase.r0 !== S.r0 || S.profBase.alpha !== S.alpha || S.profBase.group !== S.group) {
+    const p0 = profileAt(S.theta0, averager(S.theta0));
+    S.profBase = { r0: S.r0, alpha: S.alpha, group: S.group, amp: Math.max(1e-12, ...p0.map(Math.abs)) };
+  }
+  let amp = S.profBase.amp;
+  for (const c of S.hist.map((h) => h.prof).concat([cur])) for (const v of c) amp = Math.max(amp, Math.abs(v));
+  amp *= 1.1;
+  const X = (k, n) => l + ((W - l - r) * k) / n, Y = (v) => t + ((H - t - bt) * (1 - v / amp)) / 2;
+  const path = (p) => p.reduce((s, v, k) => s + (k ? "L" : "M") + X(k, p.length - 1).toFixed(1) + "," + Y(v).toFixed(1), "");
+  let s = `<line x1="${l}" x2="${W - r}" y1="${Y(0)}" y2="${Y(0)}" stroke="${PAL.line}"/>`;
+  [0, 90, 180, 270, 360].forEach((deg) => { const x = X(deg, 360); s += `<line x1="${x}" x2="${x}" y1="${t}" y2="${H - bt}" stroke="${PAL.line}" stroke-dasharray="2 3"/><text x="${x}" y="${H - 6}" text-anchor="middle">${deg}°</text>`; });
+  s += `<text x="${l - 4}" y="${Y(amp / 1.1) + 3}" text-anchor="end">${fmt(amp / 1.1)}</text><text x="${l - 4}" y="${Y(-amp / 1.1) + 3}" text-anchor="end">${fmt(-amp / 1.1)}</text>`;
+  if (!S.hist.length) s += `<path d="${path(cur)}" fill="none" stroke="${PAL.ink}" stroke-width="1.6"/>`;
+  else {
+    const tEnd = S.hist[S.hist.length - 1].t || 1, stride = Math.max(1, Math.ceil(S.hist.length / 24));
+    S.hist.forEach((h, i) => {
+      const last = i === S.hist.length - 1; if (!last && i % stride) return;
+      s += `<path d="${path(h.prof)}" fill="none" stroke="${rgb(lerp(PAL.s1, PAL.pos, h.t / tEnd))}" stroke-width="${last ? 1.9 : 1}" opacity="${last ? 1 : 0.5}"/>`;
+    });
+    const last = S.hist[S.hist.length - 1], p0 = S.hist[0].prof, n = p0.length - 1;
+    const ideal = S.hist.which === "b" ? p0.map((v) => v * Math.exp(-last.t))
+      : p0.map((_, k) => { let u = (k / n - last.t / (2 * Math.PI)) * n; u = ((u % n) + n) % n; const i = Math.floor(u), w = u - i; return p0[i] * (1 - w) + p0[Math.min(n, i + 1)] * w; });
+    s += `<path d="${path(ideal)}" fill="none" stroke="${PAL.ink}" stroke-width="1.4" stroke-dasharray="1.5 3"/>`;
+  }
+  svg.innerHTML = s;
+}
+
+// ------------------------------------------------------------------ defect-vs-t trace
+const runLabel = (h) => `${h.which === "c" ? "c*" : "b*"} ${h.mode}${h.free === "group" ? ", group" : ""}`;
+function drawTrace() {
+  const svg = $("trace"), W = 300, H = 150, l = 46, r = 10, t = 10, bt = 22;
+  const runs = S.runs.concat(S.hist.length > 1 ? [{ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect]), which: S.hist.which, mode: S.hist.mode }] : []);
+  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to trace the defect against t</text>`; return; }
+  let tMax = 0, yMax = 0, yMin = Infinity;
+  runs.forEach((rn) => rn.pts.forEach(([x, y]) => { tMax = Math.max(tMax, x); yMax = Math.max(yMax, y); yMin = Math.min(yMin, y); }));
+  const logy = yMin > 0 && yMax / yMin > 8;
+  const fy = (y) => (logy ? Math.log10(y) : y), y0 = logy ? Math.log10(yMin) - 0.05 : 0, y1 = logy ? Math.log10(yMax) + 0.1 : yMax * 1.08;
+  const X = (x) => l + ((W - l - r) * x) / (tMax || 1), Y = (y) => t + (H - t - bt) * (1 - (fy(y) - y0) / ((y1 - y0) || 1));
+  let s = `<line x1="${l}" x2="${W - r}" y1="${H - bt}" y2="${H - bt}" stroke="${PAL.line}"/><line x1="${l}" x2="${l}" y1="${t}" y2="${H - bt}" stroke="${PAL.line}"/>`;
+  s += `<text x="${W - r}" y="${H - 6}" text-anchor="end">t = ${tMax.toFixed(1)}</text><text x="${l}" y="${H - 6}">0</text>`;
+  s += `<text x="${l - 4}" y="${t + 8}" text-anchor="end">${fmt(logy ? Math.pow(10, y1) : y1)}</text><text x="${l - 4}" y="${H - bt}" text-anchor="end">${logy ? fmt(Math.pow(10, y0)) : "0"}</text>`;
+  runs.forEach((rn, i) => {
+    const col = rn.which === "c" ? PAL.accent : PAL.posH, dash = rn.mode === "fixed" ? "5 3" : "";
+    s += `<path d="${rn.pts.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="${dash}" opacity="${i === runs.length - 1 ? 1 : 0.6}"/>`;
+    s += `<text x="${l + 6}" y="${t + 10 + 12 * i}" style="fill:${col}">${rn.label}</text>`;
+  });
+  s += `<text x="${W - r}" y="${t + 8}" text-anchor="end">defect${logy ? " (log)" : ""}</text>`;
+  svg.innerHTML = s;
+}
+
+// ------------------------------------------------------------------ parameter groups
+function groupMask() {
+  const P = S.net.P, rule = $("grp-rule").value, mask = new Uint8Array(P);
+  if (rule === "bias") { for (const o of S.net.offs) for (let r = 0; r < o.o; r++) mask[o.bOff + r] = 1; return mask; }
+  if (rule.startsWith("layer")) { const o = S.net.offs[+rule.slice(5)]; for (let i = o.wOff; i < o.bOff + o.o; i++) mask[i] = 1; return mask; }
+  if (!S.attrib) return null;
+  const v = rule === "topb" ? S.attrib.b : rule === "topc" ? S.attrib.c : S.attrib.sens;
+  const k = groupK(), idx = Array.from({ length: P }, (_, i) => i).sort((a, b) => Math.abs(v[b]) - Math.abs(v[a]));
+  for (let i = 0; i < k; i++) mask[idx[i]] = 1;
+  return mask;
+}
+const groupK = () => Math.max(1, Math.round(Math.exp((Math.log(S.net.P) * +$("grp-k").value) / 1000)));
+function groupKey() { const rule = $("grp-rule").value; return `${S.key}|${rule}|${rule.startsWith("top") ? groupK() : ""}|${S.group}|${S.gauge}|${S.attribFor}`; }
+let grpTimer = 0;
+function updateGroupInfo() {
+  const rule = $("grp-rule").value, isTop = rule.startsWith("top");
+  $("k-row").hidden = !isTop; $("grp-k-val").textContent = groupK();
+  const mask = groupMask();
+  if (!mask) { $("grp-info").textContent = "Waiting for the lift…"; return; }
+  let cnt = 0; for (const m of mask) cnt += m;
+  let share = "";
+  if (S.attrib) {
+    const w = (i, v) => (S.gauge === "norm" ? S.attrib.sens[i] * v : v);
+    const part = (v) => { let a = 0, b = 0; for (let i = 0; i < v.length; i++) { const q = w(i, v[i]) ** 2; b += q; if (mask[i]) a += q; } return a / (b || 1); };
+    share = ` · holds ${(100 * part(S.attrib.b)).toFixed(0)}% of b* and ${(100 * part(S.attrib.c)).toFixed(0)}% of c*${S.gauge === "norm" ? " (gauge-weighted)" : ""}`;
+  }
+  const alone = S.grpAttrib && S.grpFor === groupKey() ? ` · alone, it reaches b* with residual ${S.grpAttrib.resB.toFixed(3)} and c* with ${S.grpAttrib.resC.toFixed(3)}` : " · solving the group-only lift…";
+  $("grp-info").textContent = `${cnt} of ${S.net.P} parameters${share}${alone}`;
+  clearTimeout(grpTimer);
+  if (!(S.grpAttrib && S.grpFor === groupKey()) && !S.walking) grpTimer = setTimeout(requestGroupAttrib, 300);
+  netDirtyOnly();
+}
+async function requestGroupAttrib() {
+  const mask = groupMask(); if (!mask) return;
+  const key = groupKey(), res = await lift(S.theta, mask);
+  if (key === groupKey()) { S.grpAttrib = res; S.grpFor = key; updateGroupInfo(); }
+}
+
+// ------------------------------------------------------------------ network diagram
+const netCv = $("net");
+let NETG = null;
+function drawNet() {
+  const { w, h, dpr } = sizeCanvas(netCv, netCv.clientHeight || 380), ctx = netCv.getContext("2d");
+  const offs = S.net.offs, cols = [offs[0].i, ...offs.map((o) => o.o)], padX = 24, padY = 14;
+  const xs = cols.map((_, k) => padX + ((w - 2 * padX) * k) / (cols.length - 1));
+  const ys = cols.map((n) => Array.from({ length: n }, (_, j) => (n === 1 ? h / 2 : padY + ((h - 2 * padY) * j) / (n - 1))));
+  NETG = { xs, ys, cols };
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const P = S.net.P, isW = S.cmode === "weight";
+  let vals = null;
+  if (isW) vals = S.theta;
+  else if (S.attrib) { const src = S.cmode === "sens" ? S.attrib.sens : S.cmode === "c" ? S.attrib.c : S.attrib.b; vals = new Float64Array(P); for (let i = 0; i < P; i++) vals[i] = Math.abs(src[i]); }
+  const mask = $("grp-show").checked ? groupMask() : null;
+  let gmax = 0; if (vals && !isW) for (let i = 0; i < P; i++) gmax = Math.max(gmax, vals[i]);
+  const posC = hexRgb(PAL.posH), negC = hexRgb(PAL.negH), accC = hexRgb(PAL.accent), mutC = hexRgb(PAL.muted), panC = hexRgb(PAL.panel);
+  offs.forEach((o, l) => {
+    let lmax = 0; if (isW) for (let k = 0; k < o.o * o.i; k++) lmax = Math.max(lmax, Math.abs(S.theta[o.wOff + k]));
+    const order = []; for (let k = 0; k < o.o * o.i; k++) order.push(o.wOff + k);
+    if (vals) order.sort((a, b) => Math.abs(vals[a]) - Math.abs(vals[b]));
+    if (mask) order.sort((a, b) => mask[a] - mask[b]);
+    for (const idx of order) {
+      const k = idx - o.wOff, r = Math.floor(k / o.i), c = k % o.i;
+      let col, a;
+      if (!vals) { col = mutC; a = 0.1; }
+      else if (isW) { a = Math.pow(Math.abs(vals[idx]) / (lmax || 1), 0.9); col = vals[idx] >= 0 ? posC : negC; }
+      else { a = Math.pow(vals[idx] / (gmax || 1), 0.5); col = accC; }
+      if (mask && !mask[idx]) { a *= 0.25; }
+      ctx.strokeStyle = rgb(col, Math.min(0.9, 0.03 + 0.85 * a)); ctx.lineWidth = 0.5 + 1.6 * a;
+      ctx.beginPath(); ctx.moveTo(xs[l], ys[l][c]); ctx.lineTo(xs[l + 1], ys[l + 1][r]); ctx.stroke();
+      if (mask && mask[idx]) { ctx.strokeStyle = rgb(accC, 0.85); ctx.lineWidth = 1.4; ctx.stroke(); }
+    }
+  });
+  cols.forEach((n, k) => {
+    for (let j = 0; j < n; j++) {
+      let fill = PAL.panel;
+      if (k > 0 && vals) {
+        const o = offs[k - 1], idx = o.bOff + j, v = vals[idx];
+        if (isW) { let bm = 0; for (let q = 0; q < o.o; q++) bm = Math.max(bm, Math.abs(S.theta[o.bOff + q])); fill = rgb(lerp(panC, v >= 0 ? posC : negC, Math.pow(Math.abs(v) / (bm || 1), 0.7))); }
+        else fill = rgb(lerp(panC, accC, Math.pow(v / (gmax || 1), 0.5)));
+      }
+      const big = k === 0 || k === cols.length - 1;
+      ctx.beginPath(); ctx.arc(xs[k], ys[k][j], big ? 6 : 3.6, 0, 2 * Math.PI);
+      ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = PAL.ink; ctx.globalAlpha = 0.6; ctx.lineWidth = 0.8; ctx.stroke(); ctx.globalAlpha = 1;
+      if (mask && k > 0 && mask[offs[k - 1].bOff + j]) { ctx.strokeStyle = PAL.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(xs[k], ys[k][j], big ? 8 : 5.5, 0, 2 * Math.PI); ctx.stroke(); }
+    }
+  });
+  ctx.fillStyle = PAL.muted; ctx.font = "11px " + cssVar("--f-mono");
+  SYS[S.key].inputs.forEach((name, j) => { ctx.textAlign = "right"; ctx.fillText(name, xs[0] - 9, ys[0][j] + 4); });
+  ctx.textAlign = "left"; ctx.fillText(SYS[S.key].out, xs[xs.length - 1] + 9, ys[ys.length - 1][0] + 4);
+  for (const [idx, style] of [[S.hover, PAL.ink], [S.sel, PAL.accent]]) if (idx >= 0) highlight(ctx, idx, style);
+  updateNetHint();
+}
+function paramWhere(idx) {
+  for (let l = 0; l < S.net.offs.length; l++) {
+    const o = S.net.offs[l];
+    if (idx >= o.wOff && idx < o.bOff) { const k = idx - o.wOff; return { l, type: "w", r: Math.floor(k / o.i), c: k % o.i }; }
+    if (idx >= o.bOff && idx < o.bOff + o.o) return { l, type: "b", r: idx - o.bOff };
+  }
+  return null;
+}
+function highlight(ctx, idx, style) {
+  const p = paramWhere(idx); if (!p) return; const { xs, ys } = NETG;
+  ctx.strokeStyle = style; ctx.lineWidth = 2.4;
+  if (p.type === "w") { ctx.beginPath(); ctx.moveTo(xs[p.l], ys[p.l][p.c]); ctx.lineTo(xs[p.l + 1], ys[p.l + 1][p.r]); ctx.stroke(); }
+  else { ctx.beginPath(); ctx.arc(xs[p.l + 1], ys[p.l + 1][p.r], 7, 0, 2 * Math.PI); ctx.stroke(); }
+}
+function pickParam(mx, my) {
+  if (!NETG) return -1;
+  const { xs, ys } = NETG, offs = S.net.offs;
+  for (let k = 1; k < xs.length; k++) for (let j = 0; j < ys[k].length; j++) if (Math.hypot(mx - xs[k], my - ys[k][j]) < 6) return offs[k - 1].bOff + j;
+  let l = -1; for (let k = 0; k < xs.length - 1; k++) if (mx > xs[k] && mx < xs[k + 1]) l = k;
+  if (l < 0) return -1;
+  const o = offs[l]; let best = -1, bd = 5;
+  for (let r = 0; r < o.o; r++) for (let c = 0; c < o.i; c++) {
+    const x0 = xs[l], y0 = ys[l][c], x1 = xs[l + 1], y1 = ys[l + 1][r];
+    const t = Math.max(0, Math.min(1, ((mx - x0) * (x1 - x0) + (my - y0) * (y1 - y0)) / ((x1 - x0) ** 2 + (y1 - y0) ** 2)));
+    const dd = Math.hypot(mx - (x0 + t * (x1 - x0)), my - (y0 + t * (y1 - y0)));
+    if (dd < bd) { bd = dd; best = o.wOff + r * o.i + c; }
+  }
+  return best;
+}
+function paramName(idx) {
+  const p = paramWhere(idx); if (!p) return ""; const L = S.net.offs.length, layer = p.l === L - 1 ? "readout" : `layer ${p.l + 1}`;
+  const src = p.l === 0 ? SYS[S.key].inputs[p.c] : `unit ${p.c + 1}`, dst = p.l === L - 1 ? SYS[S.key].out : `unit ${p.r + 1}`;
+  return p.type === "w" ? `${layer} weight, ${src} → ${dst}` : `${layer} bias, ${dst}`;
+}
+function updateNetHint() {
+  const h = { weight: "Edges: weight sign (orange +, teal −) and size, per layer. Units: bias.",
+    sens: "Edges and units: aggregate sensitivity Sᵢ, the RMS of ∂f/∂θᵢ over the probe.",
+    c: "Edges and units: |c*ᵢ|, the lift of the rotation generator.",
+    b: `Edges and units: |b*ᵢ|, the lift of −δ towards ${gName(S.group)} symmetry.` }[S.cmode];
+  const pend = S.cmode !== "weight" && !S.attrib ? " Solving the lift…" : "";
+  $("cm-hint").textContent = h + ($("grp-show").checked ? " Blue outline: the parameter group." : "") + pend;
+}
+
+// ------------------------------------------------------------------ readouts
+let SCORE = null;
+function makeScoreSets() {
+  const cfg = SYS[S.key]; let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  if (cfg.score === "acc") {
+    const mk = (deg) => { const pts = []; for (let k = 0; k < 1200; k++) { const inner = k % 2 === 0, r = inner ? 0.4 * Math.sqrt(rnd()) : Math.sqrt(0.36 + 0.64 * rnd()), a = (deg * Math.PI / 180) * rnd(); pts.push([r * Math.cos(a), r * Math.sin(a), inner ? 0 : 1]); } return pts; };
+    SCORE = { all: mk(360), wedge: mk(cfg.wedge) };
+  } else if (cfg.score === "fit") {
+    const mk = (deg) => { const pts = []; for (let k = 0; k < 1500; k++) { const r = Math.sqrt(rnd()), a = (deg * Math.PI / 180) * rnd(); const x = r * Math.cos(a), y = r * Math.sin(a); pts.push([x, y, tgtC6(x, y)]); } return pts; };
+    SCORE = { all: mk(360), wedge: mk(cfg.wedge) };
+  } else SCORE = null;
+}
+function scores() {
+  const cfg = SYS[S.key];
+  if (cfg.score === "acc") { const acc = (pts) => { let ok = 0; for (const [x, y, lab] of pts) ok += ((S.sys.value(S.theta, x, y) > 0) ? 1 : 0) === lab ? 1 : 0; return ok / pts.length; };
+    return [(100 * acc(SCORE.all)).toFixed(1) + "%", (100 * acc(SCORE.wedge)).toFixed(1) + "%"]; }
+  if (cfg.score === "fit") { const rel = (pts) => { let e = 0, s = 0; for (const [x, y, v] of pts) { e += (S.sys.value(S.theta, x, y) - v) ** 2; s += v * v; } return Math.sqrt(e / s); };
+    return [(100 * rel(SCORE.all)).toFixed(2) + "%", (100 * rel(SCORE.wedge)).toFixed(2) + "%"]; }
+  const pr = C.polarProbe(15, 32, 1), t = new Float64Array(2); let e = 0, s = 0;
+  for (const [x, y] of pr) { S.sys.field(S.theta, x, y, t); const k = -(S.alpha + x * x + y * y); e += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; s += (k * x) ** 2 + (k * y) ** 2; }
+  return [(100 * Math.sqrt(e / s)).toFixed(1) + "%", ""];
+}
+function stateFor(th, n, eta) {
+  const [nR, nA] = SYS[S.key].probe;
+  return n > 0 ? C.cyclicState(S.sys, th, nR, nA, n, 1, eta) : C.ringState(S.sys, th, nR, nA, Math.max(64, 2 * nA), 1, eta);
+}
+function updateReadouts() {
+  const cfg = SYS[S.key], d = stateFor(S.theta, S.group, false).defect;
+  $("ro-defect-k").textContent = `defect for ${gName(S.group)}, ‖δ‖ / ‖f‖`;
+  $("ro-defect").textContent = fmt(d);
+  let dd = 0, n0 = 0; for (let i = 0; i < S.theta.length; i++) { dd += (S.theta[i] - S.theta0[i]) ** 2; n0 += S.theta0[i] ** 2; }
+  $("ro-dist").textContent = fmt(Math.sqrt(dd / n0));
+  const [s1, s2] = scores(); $("ro-s1").textContent = s1; $("ro-s2").textContent = s2;
+  const fresh = S.attrib && S.attribFor === S.version;
+  if (S.attrib) { $("ro-res").innerHTML = `${S.attrib.resC.toFixed(3)} <small>/</small> ${S.attrib.resB.toFixed(3)}${fresh ? "" : " <small>…</small>"}`; $("ro-rank").innerHTML = `${S.attrib.rank}${fresh ? "" : " <small>…</small>"}`; }
+  else { $("ro-res").innerHTML = "<small>solving…</small>"; $("ro-rank").innerHTML = "<small>…</small>"; }
+  if (cfg.groups.length > 1) {
+    const ds = cfg.groups.map((n) => [n, stateFor(S.theta, n, false).defect]), mx = Math.max(...ds.map((q) => q[1]), 1e-12);
+    $("ladder").innerHTML = ds.map(([n, v]) => `<span class="${n === S.group ? "sel" : ""}">${gName(n)}</span><span class="bar"><i style="width:${(100 * Math.min(1, v / Math.max(mx, 0.05))).toFixed(1)}%"></i></span><span class="${n === S.group ? "sel" : ""}">${fmt(v)}</span>`).join("");
+  }
+  return d;
+}
+
+// ------------------------------------------------------------------ render loop
+let dirty = false, netDirty = false, scheduled = false;
+function markDirty(net) {
+  dirty = true; if (net) netDirty = true;
+  if (scheduled) return; scheduled = true;
+  const run = () => { if (!scheduled) return; scheduled = false; frame(); };
+  requestAnimationFrame(run); setTimeout(run, 120); // timer fallback for background tabs
+}
+function netDirtyOnly() { netDirty = true; if (!dirty) { dirty = true; markDirty(true); } }
+function frame() {
+  if (!dirty) return; dirty = false;
+  if (!PAL) readPalette();
+  const d = displayData(S.theta);
+  drawField(d);
+  drawProfile(profileAt(S.theta, d.av));
+  updateReadouts();
+  drawTrace();
+  if (netDirty) { drawNet(); netDirty = false; }
+}
+
+// ------------------------------------------------------------------ lifts via the worker
+function lift(theta, mask) {
+  return new Promise((resolve) => {
+    const id = ++liftId; pending.set(id, resolve);
+    const th = theta.slice(), msg = { cmd: "lift", id, key: S.key, kind: SYS[S.key].kind, probe: SYS[S.key].probe, group: S.group, alpha: S.alpha, raw: S.gauge === "raw", theta: th.buffer };
+    const tr = [th.buffer];
+    if (mask) { const m = mask.slice(); msg.mask = m.buffer; tr.push(m.buffer); }
+    worker.postMessage(msg, tr);
+  });
+}
+function status(msg, busy) { const el = $("status"); el.innerHTML = msg || ""; el.classList.toggle("busy", !!busy); }
+let attribBusy = false, attribTimer = 0;
+async function requestAttrib() {
+  if (attribBusy || !worker || S.walking) return;
+  attribBusy = true; const v = S.version, key = S.key, grp = S.group, gauge = S.gauge;
+  const res = await lift(S.theta);
+  attribBusy = false;
+  if (key !== S.key || grp !== S.group || gauge !== S.gauge) return requestAttrib();
+  S.attrib = res; S.attribFor = v;
+  updateGroupInfo(); markDirty(true);
+  if (v !== S.version) requestAttribSoon();
+}
+function requestAttribSoon() { clearTimeout(attribTimer); attribTimer = setTimeout(requestAttrib, 300); }
+
+// ------------------------------------------------------------------ walks
+function setGauge(g, silent) {
+  if (S.walking) return;
+  S.gauge = g; $("g-norm").setAttribute("aria-pressed", g === "norm"); $("g-raw").setAttribute("aria-pressed", g === "raw");
+  const why = { c6_wedge120: "In the normalised gauge the lift moves the parameters roughly 100 times further for the same effect. ", c6_wedge360: "" }[S.key] || "";
+  $("gauge-hint").textContent = g === "raw" ? `Gauge: plain minimum-ℓ2 lift${SYS[S.key].gauge === "raw" ? " (the default for this system)" : ""}. ${why}` : "Gauge: sensitivity-normalised, as in the paper. The lift minimises Σ Sᵢ² cᵢ², which does not change when a parameter is rescaled.";
+  if (!silent) { S.version++; S.attrib = null; S.grpAttrib = null; markDirty(true); requestAttrib(); }
+}
+function lockControls(on) {
+  for (const id of ["w-go", "w-restore", "grp-kick", "grp-zero", "reset", "w-clear"]) $(id).disabled = on;
+  $("w-stop").disabled = !on;
+  document.querySelectorAll(".pickers button, #group-seg button, #g-norm, #g-raw, #free-all, #free-grp").forEach((b) => (b.disabled = on));
+  $("alpha").disabled = on; $("sel-slider").disabled = on || S.sel < 0;
+}
+async function walk(opts = {}) {
+  if (S.walking) return;
+  const which = opts.which || S.which, mode = opts.mode || S.mode, free = opts.free || S.free, dt = opts.dt || S.dt, T = opts.T || S.T;
+  if (S.hist.length > 1) { S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect]), which: S.hist.which, mode: S.hist.mode }); if (S.runs.length > 4) S.runs.shift(); }
+  S.walking = true; S.stop = false; lockControls(true);
+  let mask = null;
+  if (free === "group") {
+    if (!S.attrib && $("grp-rule").value.startsWith("top")) { status("Solving the full lift to rank the parameters…", true); S.attrib = await lift(S.theta); S.attribFor = S.version; }
+    mask = groupMask();
+  }
+  const nSteps = Math.max(1, Math.round(T / dt));
+  const d0 = updateReadouts();
+  S.hist = [{ t: 0, defect: d0, prof: profileAt(S.theta, averager(S.theta)) }];
+  Object.assign(S.hist, { which, mode, free });
+  let v0 = null, plateau = false;
+  const pgStart = opts.adaptive && which === "b" ? averager(S.theta.slice()) : null;
+  if (opts.adaptive) {
+    // Step control for the preset: cap each step at 5% of |theta_0| and halve it until the defect drops.
+    const n0 = Math.hypot(...S.theta0);
+    let t = 0, h = dt, dNow = d0, k = 0;
+    while (t < T - 1e-9 && !S.stop) {
+      k++;
+      status(`Re-solving the lift, step ${k}, t = ${t.toFixed(2)}…`, true);
+      const res = await lift(S.theta, mask);
+      if (!mask) { S.attrib = res; S.attribFor = S.version; }
+      const dir = which === "c" ? res.c : res.b;
+      const nd = Math.hypot(...dir);
+      let hk = Math.min(h, T - t, 0.05 * n0 / Math.max(nd, 1e-12)), ok = false;
+      const base = S.theta.slice();
+      for (let tries = 0; tries < 10 && !ok; tries++) {
+        for (let i = 0; i < base.length; i++) S.theta[i] = base[i] + hk * dir[i];
+        const dTry = stateFor(S.theta, S.group, false).defect;
+        if (dTry < dNow) { ok = true; dNow = dTry; } else hk /= 2;
+      }
+      if (!ok) { S.theta.set(base); break; }
+      t += hk; h = Math.min(dt, hk * 1.5);
+      S.version++;
+      S.hist.push({ t, defect: dNow, prof: profileAt(S.theta, averager(S.theta)) });
+      markDirty(true);
+      if (opts.until && dNow <= opts.until * d0) break;
+      // Plateau: less than a 10% drop over the last two units of t.
+      const back = S.hist.find((hh) => hh.t >= t - 2);
+      if (t > 3 && back && back.t <= t - 1.5 && dNow > 0.9 * back.defect) { plateau = true; break; }
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  } else
+  for (let k = 1; k <= nSteps && !S.stop; k++) {
+    let dir;
+    if (k === 1 || mode === "resolved") {
+      status(`${k === 1 ? "Solving" : "Re-solving"} the lift${mask ? " with only the group free" : ""}, step ${k} of ${nSteps}…`, true);
+      const res = await lift(S.theta, mask);
+      if (!mask) { S.attrib = res; S.attribFor = S.version; }
+      dir = which === "c" ? res.c : res.b; if (k === 1) v0 = dir;
+    } else dir = v0;
+    if (S.stop) break;
+    for (let i = 0; i < S.theta.length; i++) S.theta[i] += dt * dir[i];
+    S.version++;
+    const dNow = stateFor(S.theta, S.group, false).defect;
+    S.hist.push({ t: k * dt, defect: dNow, prof: profileAt(S.theta, averager(S.theta)) });
+    markDirty(true);
+    if (opts.until && dNow <= opts.until * d0) break;
+    await new Promise((r) => setTimeout(r, mode === "fixed" ? 40 : 0));
+  }
+  S.walking = false; lockControls(false);
+  const last = S.hist[S.hist.length - 1];
+  let tail = "";
+  if (pgStart && !S.stop) {
+    // How close the end point is to P_G f of the starting network (the target of the ideal flow).
+    const cfg = SYS[S.key], two = cfg.kind !== "scalar", a = new Float64Array(2), b = new Float64Array(2);
+    let e = 0, n2 = 0;
+    for (let i = 1; i <= 20; i++) for (let j = 0; j < 48; j++) {
+      const r = i / 20, x = r * Math.cos(j * Math.PI / 24), y = r * Math.sin(j * Math.PI / 24);
+      if (two) { S.sys.field(S.theta, x, y, a); pgStart.pgF(x, y, b); e += (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2; n2 += b[0] ** 2 + b[1] ** 2; }
+      else { const p = pgStart.pg(x, y); e += (S.sys.value(S.theta, x, y) - p) ** 2; n2 += p * p; }
+    }
+    const gap = 100 * Math.sqrt(e / n2);
+    tail = gap < 5 ? ` The network now computes P<sub>G</sub>f of where it started, to within ${gap.toFixed(1)}%.`
+      : ` The result is symmetric but ${gap.toFixed(0)}% away from P<sub>G</sub>f of where it started: the lift could not follow −δ exactly, so the walk also changed the symmetric part.`;
+  }
+  status(S.stop ? "Stopped." : `${plateau ? "Levelled off" : "Done"} at t = ${last.t.toFixed(2)}: defect ${fmt(d0)} → ${fmt(last.defect)} (${(100 * last.defect / d0).toFixed(1)}% of the start).${tail}`);
+  updateInspector(); updateGroupInfo(); markDirty(true); requestAttrib();
+}
+
+// ------------------------------------------------------------------ single parameter and kicks
+function updateInspector() {
+  const sl = $("sel-slider");
+  if (S.sel < 0) { $("sel-name").textContent = "One parameter: click an edge or a unit."; $("sel-row").hidden = true; sl.disabled = true; return; }
+  const v0 = S.theta0[S.sel], span = Math.max(0.5, 2.5 * Math.abs(v0));
+  sl.disabled = S.walking; sl.min = v0 - span; sl.max = v0 + span; sl.step = span / 500; sl.value = S.theta[S.sel];
+  $("sel-name").textContent = paramName(S.sel); $("sel-row").hidden = false;
+  $("sel-val").textContent = `${fmt(S.theta[S.sel])} (trained ${fmt(v0)})`;
+}
+function changed() { S.version++; S.hist = []; markDirty(true); requestAttribSoon(); }
+
+function bind() {
+  for (const f of Object.keys(FAMS)) $("fam-" + f).onclick = () => setSystem(FAMS[f].keys[0]);
+  for (const v of ["f", "pe", "delta"]) $("v-" + v).onclick = () => { S.view = v; for (const u of ["f", "pe", "delta"]) $("v-" + u).setAttribute("aria-pressed", u === v); markDirty(); };
+  for (const m of ["weight", "sens", "c", "b"]) $("cm-" + m).onclick = () => { S.cmode = m; for (const u of ["weight", "sens", "c", "b"]) $("cm-" + u).setAttribute("aria-pressed", u === m); markDirty(true); };
+  const pair = (a, b, set) => { $(a).onclick = () => { set(true); $(a).setAttribute("aria-pressed", true); $(b).setAttribute("aria-pressed", false); }; $(b).onclick = () => { set(false); $(b).setAttribute("aria-pressed", true); $(a).setAttribute("aria-pressed", false); }; };
+  pair("w-c", "w-b", (x) => (S.which = x ? "c" : "b"));
+  pair("m-res", "m-fix", (x) => (S.mode = x ? "resolved" : "fixed"));
+  pair("free-all", "free-grp", (x) => (S.free = x ? "all" : "group"));
+  $("g-norm").onclick = () => setGauge("norm"); $("g-raw").onclick = () => setGauge("raw");
+  $("wT").oninput = (e) => { S.T = +e.target.value; $("wT-val").textContent = S.T.toFixed(1); };
+  $("w-dt").onchange = (e) => { S.dt = +e.target.value; };
+  $("w-go").onclick = () => walk();
+  $("w-restore").onclick = () => {
+    if (S.gauge !== "norm") setGauge("norm");
+    walk({ which: "b", mode: "resolved", free: "all", dt: 0.25, T: 12, until: 0.01, adaptive: true });
+  };
+  $("w-stop").onclick = () => { S.stop = true; };
+  $("w-clear").onclick = () => { S.runs = []; S.hist = []; markDirty(); };
+  $("r0").oninput = (e) => { S.r0 = +e.target.value; $("r0-val").textContent = "r = " + S.r0.toFixed(2); S.hist = []; markDirty(); };
+  $("alpha").oninput = (e) => { S.alpha = +e.target.value; $("alpha-val").textContent = S.alpha.toFixed(2).replace("-", "−"); computeBase(); changed(); };
+  $("lock-scale").onchange = (e) => { S.lock = e.target.checked; markDirty(); };
+  $("show-probe").onchange = (e) => { S.probe = e.target.checked; markDirty(); };
+  $("sel-slider").oninput = (e) => { if (S.sel < 0 || S.walking) return; S.theta[S.sel] = +e.target.value; $("sel-val").textContent = `${fmt(S.theta[S.sel])} (trained ${fmt(S.theta0[S.sel])})`; changed(); netDirtyOnly(); };
+  $("kick-size").oninput = (e) => { $("kick-val").textContent = (+e.target.value).toFixed(1) + "%"; };
+  $("grp-rule").onchange = updateGroupInfo; $("grp-k").oninput = updateGroupInfo; $("grp-show").onchange = () => { netDirtyOnly(); updateNetHint(); };
+  $("grp-kick").onclick = () => {
+    const mask = groupMask(); if (!mask || S.walking) return;
+    let cnt = 0; for (const m of mask) cnt += m;
+    const sd = (+$("kick-size").value / 100) * C.norm(S.theta0) / Math.sqrt(cnt);
+    for (let i = 0; i < mask.length; i++) if (mask[i]) { const u = Math.random() || 1e-12, v = Math.random(); S.theta[i] += sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+    updateInspector(); changed(); netDirtyOnly();
+  };
+  $("grp-zero").onclick = () => { const mask = groupMask(); if (!mask || S.walking) return; for (let i = 0; i < mask.length; i++) if (mask[i]) S.theta[i] = 0; updateInspector(); changed(); netDirtyOnly(); };
+  $("reset").onclick = () => { if (S.walking) return; S.theta = S.theta0.slice(); updateInspector(); changed(); netDirtyOnly(); };
+  netCv.addEventListener("mousemove", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p !== S.hover) { S.hover = p; netCv.title = p >= 0 ? `${paramName(p)} = ${fmt(S.theta[p])}` : ""; drawNet(); } });
+  netCv.addEventListener("mouseleave", () => { S.hover = -1; drawNet(); });
+  netCv.addEventListener("click", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); } });
+  fieldCv.addEventListener("mousemove", (e) => {
+    const b = fieldCv.getBoundingClientRect(), x = -E + (2 * E * (e.clientX - b.left)) / b.width, y = E - (2 * E * (e.clientY - b.top)) / b.height;
+    const v = S.sys.value(S.theta, x, y), m = S.lastDisplay ? S.lastDisplay.av.pg(x, y) : NaN, o = SYS[S.key].out, el = $("hover-ro");
+    el.hidden = false; el.textContent = `(${fmt(x)}, ${fmt(y)})  ${o} ${fmt(v)}  P_G ${o} ${fmt(m)}  δ ${fmt(v - m)}`;
+  });
+  fieldCv.addEventListener("mouseleave", () => { $("hover-ro").hidden = true; });
+  window.addEventListener("resize", () => markDirty(true));
+  window.addEventListener("hashchange", () => { const k = Object.keys(SYS).find((q) => "#" + SYS[q].hash === location.hash); if (k && k !== S.key) setSystem(k, true); });
+  const repal = () => { PAL = null; readPalette(); markDirty(true); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", repal);
+  new MutationObserver(repal).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+}
+
+// ------------------------------------------------------------------ boot
+(async function boot() {
+  readPalette(); bind();
+  S.weights = await fetch("weights.json").then((r) => r.json());
+  worker = new Worker("worker.js");
+  worker.onmessage = (ev) => { const r = pending.get(ev.data.id); if (r) { pending.delete(ev.data.id); r(ev.data); } };
+  worker.postMessage({ cmd: "init", weights: S.weights });
+  const start = Object.keys(SYS).find((q) => "#" + SYS[q].hash === location.hash) || "annulus_wedge90";
+  setSystem(start, true);
+})();
+</script>
+</body>
+</html>
