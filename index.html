@@ -106,6 +106,8 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 #summary td { padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
 #summary .n { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums }
 #summary th.n { font-family: inherit }
+#summary .spark { display: block; color: var(--ink) }
+#summary .eqtag { color: var(--muted); font-size: 11px }
 #summary tbody tr { cursor: pointer }
 #summary tbody tr:hover { background: var(--soft) }
 #summary tr.cur td:first-child { box-shadow: inset 3px 0 0 var(--hl) }
@@ -247,7 +249,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         </div>
         <div class="row"><button class="btn" id="w-compare" title="From the trained weights, run a Fixed walk and then a Resolved walk in the chosen direction, and overlay both in the trace (as in the paper's figures)">Resolved vs Fixed</button><span class="hint">from the trained weights, to the t in the settings</span></div>
         <div class="status" id="status"></div>
-        <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true">equivariance defect</button><button id="tr-loss" aria-pressed="false">training loss</button></div></div>
+        <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true">equivariance defect</button><button id="tr-loss" aria-pressed="false">training loss</button><button id="tr-fit" aria-pressed="false" title="Accuracy (classifiers) or error against the true field (regressions) along the walk: solid over the whole domain, dotted on the training region">fit</button><button id="tr-plane" aria-pressed="false" title="Each walk as a path in the plane of equivariance defect (across) and training loss (up): the start is the hollow circle">loss vs defect</button></div></div>
         <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
         <details class="adv">
           <summary>Walk settings</summary>
@@ -283,9 +285,9 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
   </div>
 
   <section class="panel" id="summary-panel">
-    <div class="row between"><h2>Training loss is not symmetry</h2><span class="hint">every trained network, at its default group</span></div>
-    <div class="tablewrap"><table id="summary"><thead><tr><th>System</th><th>Trained on</th><th class="n">Training loss</th><th class="n">Defect ‖δ‖ / ‖f‖</th><th class="n">Fit where trained</th><th class="n">Fit everywhere</th></tr></thead><tbody><tr><td colspan="6" class="hint">computing…</td></tr></tbody></table></div>
-    <p class="hint">A network can fit its training data almost perfectly and still be far from equivariant: where the data do not constrain it, nothing pushes it towards ℰ. Compare each pair: the same architecture and loss, trained on part or all of the symmetric domain. Fit is accuracy for classifiers and relative error for regressions; the spiral's label-smoothed loss cannot go below 0.199. Even with full coverage the spiral keeps a sizeable defect: the labels only fix the sign of the logit, not its size away from the boundary. Click a row to open it.</p>
+    <div class="row between"><h2>Training loss is not symmetry</h2><label class="check"><input type="checkbox" id="sum-all"> all systems</label></div>
+    <div class="tablewrap"><table id="summary"><thead><tr><th>System</th><th>Trained on</th><th class="n">Training loss</th><th class="n">Defect ‖δ‖ / ‖f‖</th><th class="n">Fit where trained</th><th class="n">Fit everywhere</th><th title="Training loss (dashed) and defect (solid) at initialisation, 2%, 10% and the end of training, each on its own log scale">Over training</th></tr></thead><tbody><tr><td colspan="7" class="hint">computing…</td></tr></tbody></table></div>
+    <p class="hint">A network can fit its training data almost perfectly and still be far from equivariant: where the data do not constrain it, nothing pushes it towards ℰ. Compare the networks of one system: the same loss, trained on part or all of the symmetric domain. Defects are for each system's default group. Fit is accuracy for classifiers and relative error for regressions. <span id="sum-spiral">The spiral's label-smoothed loss cannot go below 0.199, and even with full coverage the spiral keeps a sizeable defect: the labels only fix the sign of the logit, not its size away from the boundary.</span> Equivariant nets have zero defect for their own group at every stage, so only their loss is drawn. Click a row to open it.</p>
   </section>
 
   <section class="panel about">
@@ -298,7 +300,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <h3>The two directions</h3>
       <p><span class="math">c* = J<sup>+</sup>η</span> and <span class="math">b* = J<sup>+</sup>(−δ)</span>. <span class="math">J</span> is the Jacobian of the outputs on a polar probe with respect to the parameters. <span class="math">J<sup>+</sup></span> is truncated at <span class="math">σ<sub>k</sub> ≥ 10<sup>−3</sup>σ<sub>1</sub></span>, and the minimum norm is taken in the sensitivity-normalised gauge (or plain ℓ2, by the switch). The lift residual is the part of the target the parameters cannot reach locally.</p>
       <p><b>Resolved</b> walks recompute <span class="math">J</span> and the direction at every Euler step; <b>Fixed</b> walks reuse the one from <span class="math">t = 0</span>. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
-      <p>The <b>training stage</b> switch loads checkpoints of the same run, at initialisation and after 2% and 10% of training, so you can compare how well the lifts work before and after training. The <b>training loss</b> readout is each network's objective on a sample from its training distribution; it shows what a walk costs the fit.</p>
+      <p>The <b>training stage</b> switch loads checkpoints of the same run, at initialisation and after 2% and 10% of training, so you can compare how well the lifts work before and after training. The <b>training loss</b> readout is each network's objective on a sample from its training distribution; it shows what a walk costs the fit. The <b>trace</b> under the walk plots the defect, the training loss, the fit (accuracy or error, over the whole domain and where trained), or the walk as a path in the loss–defect plane.</p>
       <p>The <b>coefficient plot</b> shows <span class="math">|c*ᵢ|</span> against <span class="math">|b*ᵢ|</span> for every parameter, in the gauge chosen for the lift. In the normalised gauge the norm minimised is <span class="math">Σ S<sub>i</sub>² c<sub>i</sub>²</span>, so a parameter with a small sensitivity can carry a large coefficient.</p>
     </div>
     <div>
@@ -308,6 +310,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <p><b>Spiral classifier</b>: the same MLP separating the two classes of a three-arm spiral, <span class="math">sign sin 3(φ − 2r)</span> for <span class="math">0.15 ≤ r ≤ 1</span>, trained on a 120° wedge or on the whole disc. The labels have <span class="math">C₃</span> symmetry only: averaging over <span class="math">C₆</span> or <span class="math">SO(2)</span> mixes the two classes, so choosing those groups shows what the lift does when the target symmetry is wrong. Probe: 15 radii × 48 angles.</p>
       <p><b>Two-body</b>: the relative coordinate <span class="math">q</span> of two bodies under softened gravity, <span class="math">V = −1/√(‖q‖² + 0.09)</span>. The same MLP learns <span class="math">V</span> by matching the force <span class="math">−∇V</span> at positions observed along orbits: three half orbits that all start on the <span class="math">+x</span> axis, or 24 full orbits spread round the circle. Both reach a small training loss, but only the second data set pins down a rotation-invariant potential, so the first converges with a large <span class="math">SO(2)</span> defect. Probe: 15 radii × 32 angles.</p>
       <p><b>Six-fold potential</b>: the same MLP regressing <span class="math">V = r⁴ − 1.2r² + 0.25r⁶cos 6φ</span>, trained on a 120° wedge or on the whole disc. Choose <span class="math">C₂, C₃, C₆</span> or <span class="math">SO(2)</span> as the target symmetry. Probe: 15 radii × 48 angles, closed under every <span class="math">C<sub>n</sub></span> used.</p>
+      <p><b>Equivariant nets</b>: each system with a restricted training set also has a network with the symmetry built in: the same MLP, fed only group-invariant inputs (<span class="math">x² + y²</span> for <span class="math">SO(2)</span>; <span class="math">r, cos nφ, sin nφ</span> for <span class="math">C<sub>n</sub></span>), trained on the same restricted data with the same loss. For its own group <span class="math">δ</span> and <span class="math">η</span> are zero whatever the weights, so there is nothing to lift; choose a larger group to compare.</p>
       <p class="hint">Method from <a href="https://arxiv.org/abs/2608.24700" target="_blank" rel="noopener"><i>Parameter-Level Attribution of Symmetry in Trained Networks</i></a> (NeurReps 2026, arXiv:2608.24700). Everything is computed live in your browser, in float64.</p>
     </div>
   </section>
@@ -325,11 +328,11 @@ const gName = (n) => (n === 0 ? "SO(2)" : "C" + SUB[n]);
 const tgtC6 = (x, y) => { const r2 = x * x + y * y, p = Math.atan2(y, x); return r2 * r2 - 1.2 * r2 + 0.25 * r2 * r2 * r2 * Math.cos(6 * p); };
 
 const FAMS = {
-  annulus: { keys: ["annulus_wedge90", "annulus_wedge360"] },
+  annulus: { keys: ["annulus_wedge90", "annulus_wedge360", "annulus_eq"] },
   mexican: { keys: ["mexican_hat"] },
-  sixfold: { keys: ["c6_wedge120", "c6_wedge360"] },
-  spiral: { keys: ["spiral_wedge120", "spiral_wedge360"] },
-  twobody: { keys: ["twobody_arcs", "twobody_orbits"] },
+  sixfold: { keys: ["c6_wedge120", "c6_wedge360", "c6_eq"] },
+  spiral: { keys: ["spiral_wedge120", "spiral_wedge360", "spiral_eq"] },
+  twobody: { keys: ["twobody_arcs", "twobody_orbits", "twobody_eq"] },
 };
 // style: "class" = pale class fills + coolwarm contours + black boundary; "potential" = viridis + white contours
 const SYS = {
@@ -351,6 +354,15 @@ const SYS = {
     inputs: ["q₁", "q₂"], out: "V", r0: 0.5, title: "Learned potential V and force −∇V", circles: [1], score: "orbit", style: "potential" },
   twobody_orbits: { fam: "twobody", hash: "twobody-orbits", label: "24 full orbits", kind: "force", noAlpha: true, probe: [15, 32], groups: [0], gauge: "norm",
     inputs: ["q₁", "q₂"], out: "V", r0: 0.5, title: "Learned potential V and force −∇V", circles: [1], score: "orbit", style: "potential" },
+  // equivariant by construction: the same MLP fed group-invariant inputs, trained on the same restricted data as the wedge arm
+  annulus_eq: { fam: "annulus", hash: "annulus-eq", label: "equivariant net", trained: "90° wedge", eq: "x² + y²", kind: "scalar", wedge: 90, probe: [15, 32], groups: [0], gauge: "norm",
+    inputs: ["r²"], out: "f", r0: 0.5, title: "Logit field", circles: [0.4, 0.6, 1], score: "acc", style: "class" },
+  c6_eq: { fam: "sixfold", hash: "sixfold-eq", label: "equivariant net", trained: "120° wedge", eq: "r, cos 6φ, sin 6φ", kind: "scalar", wedge: 120, probe: [15, 48], groups: [2, 3, 6, 0], group: 6, gauge: "raw",
+    inputs: ["r", "cos 6φ", "sin 6φ"], out: "V", r0: 0.75, title: "Learned potential V", circles: [1], score: "fit", style: "potential" },
+  spiral_eq: { fam: "spiral", hash: "spiral-eq", label: "equivariant net", trained: "120° wedge", eq: "r, cos 3φ, sin 3φ", kind: "scalar", wedge: 120, probe: [15, 48], groups: [3, 6, 0], group: 3, gauge: "raw", restoreGauge: "raw",
+    inputs: ["r", "cos 3φ", "sin 3φ"], out: "f", r0: 0.6, title: "Logit field", circles: [0.15, 1], score: "acc", style: "class" },
+  twobody_eq: { fam: "twobody", hash: "twobody-eq", label: "equivariant net", trained: "3 half orbits", eq: "‖q‖²", orbits: "arcs", kind: "force", noAlpha: true, probe: [15, 32], groups: [0], gauge: "norm",
+    inputs: ["‖q‖²"], out: "V", r0: 0.5, title: "Learned potential V and force −∇V", circles: [1], score: "orbit", style: "potential" }
 };
 const S = {
   key: null, weights: null, net: null, sys: null, theta0: null, theta: null, alpha: -0.5, group: 0,
@@ -385,9 +397,29 @@ const fmt = (v) => { if (!isFinite(v)) return "–"; const a = Math.abs(v); retu
 // ------------------------------------------------------------------ system set-up
 const STAGES = [["init", "init"], ["early", "2%"], ["mid", "10%"], ["trained", "trained"]];
 const wkey = () => { const k = S.key + (S.stage === "trained" ? "" : "@" + S.stage); return S.weights[k] ? k : S.key; };
-function setSystem(key, fromHash) {
+// URL hash: "#<system>" plus optional "&stage=<init|early|mid>" and "&g=<n>" (0 = SO(2)), so a link opens the same view
+function parseHash() {
+  const [h, ...kv] = location.hash.replace(/^#/, "").split("&"), key = Object.keys(SYS).find((q) => SYS[q].hash === h), o = {};
+  for (const p of kv) { const [a, b] = p.split("="); o[a] = b; }
+  const cfg = key && SYS[key], stage = STAGES.some(([st]) => st === o.stage) ? o.stage : "trained", g = o.g !== undefined ? +o.g : NaN;
+  return key ? { key, stage, group: cfg.groups.includes(g) ? g : undefined } : null;
+}
+function writeHash() {
+  const cfg = SYS[S.key], def = cfg.group ?? cfg.groups[0];
+  const h = "#" + cfg.hash + (S.stage !== "trained" ? "&stage=" + S.stage : "") + (S.group !== def ? "&g=" + S.group : "");
+  if (location.hash !== h) { try { history.replaceState(null, "", h); } catch (e) { location.hash = h; } }
+}
+function applyHash() {
+  const q = parseHash(); if (!q || S.walking) return false;
+  if (q.key === S.key && q.stage === S.stage && (q.group === undefined || q.group === S.group)) return true;
+  S.key = null; S.stage = q.stage; setSystem(q.key, true, true);
+  if (q.group !== undefined && q.group !== S.group) setGroup(q.group);
+  return true;
+}
+function setSystem(key, fromHash, keepStage) {
   if (S.walking) return;
-  if (key !== S.key) S.stage = "trained";
+  const sameKey = key === S.key;
+  if (!sameKey && !keepStage) S.stage = "trained";
   S.key = key; const cfg = SYS[key];
   S.net = C.makeNet(S.weights[wkey()]);
   const sts = STAGES.filter(([st]) => st === "trained" || S.weights[key + "@" + st]), sg = $("stage-seg");
@@ -396,7 +428,7 @@ function setSystem(key, fromHash) {
   S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
   S.theta0 = S.net.theta.slice(); S.theta = S.theta0.slice();
   S.sel = -1; S.attrib = null; S.grpAttrib = null; S.hist = []; S.runs = []; S.r0 = cfg.r0; S.version++;
-  S.group = cfg.group ?? cfg.groups[0];
+  if (!(sameKey && cfg.groups.includes(S.group))) S.group = cfg.group ?? cfg.groups[0];
   $("r0").value = S.r0; $("r0-val").textContent = "r = " + S.r0.toFixed(2);
   for (const f of Object.keys(FAMS)) $("fam-" + f).setAttribute("aria-pressed", f === cfg.fam);
   const ds = $("data-seg"); ds.innerHTML = ""; ds.hidden = FAMS[cfg.fam].keys.length < 2;
@@ -411,9 +443,10 @@ function setSystem(key, fromHash) {
     annulus: "Fill: predicted class. Black line: decision boundary f = 0 (dashed: where it was before the weights moved); thin lines: contours of f, blue below zero and red above. " + (cfg.wedge < 360 ? "Points: training data, all inside the 90° wedge. " : "Points: training data. ") + "Dotted circle: the profile radius.",
     mexican: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc. Dotted circle: the profile radius.",
     spiral: "Fill: predicted class; black line: f = 0 (dashed: before the weights moved); thin lines: contours of f. " + (cfg.wedge < 360 ? "Points: training data, all inside the 120° wedge (one period of the pattern). " : "Points: training data. ") + "The labels repeat every 120° and swap every 60°, so the task has C₃ symmetry but not C₆ or SO(2). Dotted circle: the profile radius.",
-    twobody: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Orange dots: the observed positions the network was trained on" + (key === "twobody_arcs" ? ", three half orbits that all start on the +x axis. " : ", 24 orbits spread round the circle. ") + "The true potential is rotation-invariant. Dotted circle: the profile radius.",
+    twobody: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Orange dots: the observed positions the network was trained on" + (key !== "twobody_orbits" ? ", three half orbits that all start on the +x axis. " : ", 24 orbits spread round the circle. ") + "The true potential is rotation-invariant. Dotted circle: the profile radius.",
     sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Dotted circle: the profile radius.",
   }[cfg.fam];
+  if (cfg.eq) $("field-hint").textContent += ` Equivariant by construction: this network only sees ${cfg.eq}, so it is invariant under ${gName(cfg.group ?? cfg.groups[0])} whatever its weights.`;
   $("try-hint").innerHTML = TRY[key] ? "<b>Try:</b> " + TRY[key] : ""; $("try-hint").hidden = !TRY[key];
   $("ro-s1-k").textContent = { acc: "accuracy, all angles", force: "force error vs true", fit: "error vs true V, whole disc", orbit: "force error vs true, whole disc" }[cfg.score];
   $("ro-s2-k").textContent = { acc: "accuracy, training wedge", fit: "error vs true V, training wedge", force: "", orbit: "force error vs true, on the observed orbits" }[cfg.score];
@@ -429,7 +462,7 @@ function setSystem(key, fromHash) {
   makeScoreSets();
   computeBase();
   updateInspector(); updateGroupInfo();
-  if (!fromHash) { try { history.replaceState(null, "", "#" + cfg.hash); } catch (e) { location.hash = cfg.hash; } }
+  writeHash();
   markDirty(true); requestAttrib();
   if ($("summary").tBodies[0].rows[0]?.dataset.k) markSummary();
 }
@@ -437,6 +470,7 @@ function setGroup(n) {
   if (S.walking) return;
   S.group = n; for (const b of $("group-seg").children) b.setAttribute("aria-pressed", b.id === "grp-" + n);
   S.hist = []; S.runs = []; S.version++; S.attrib = null; S.grpAttrib = null; computeBase(); markDirty(true); requestAttrib();
+  writeHash();
 }
 function computeBase() {
   const d = displayData(S.theta0);
@@ -672,24 +706,62 @@ function drawProfile(cur) {
 const runLabel = (h) => `${h.which === "c" ? "c*" : "b*"} ${h.mode}${h.free === "group" ? ", group" : ""}`;
 function drawTrace() {
   const svg = $("trace"), W = 300, H = 150, l = 46, r = 10, t = 10, bt = 22;
-  const runs = S.runs.concat(S.hist.length > 1 ? [{ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss]), which: S.hist.which, mode: S.hist.mode }] : []);
-  const qi = S.traceKind === "loss" ? 2 : 1, qName = qi === 2 ? "training loss" : "defect";
-  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to trace the ${qName} against t</text>`; return; }
-  runs.forEach((rn) => { rn.q = rn.pts.map((p) => [p[0], p[qi] ?? NaN]).filter((p) => isFinite(p[1])); });
+  const runs = S.runs.concat(S.hist.length > 1 ? [{ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss, ...h.fit]), which: S.hist.which, mode: S.hist.mode }] : []);
+  if (S.traceKind === "plane") return drawPlane(svg, runs);
+  const isAcc = SYS[S.key].score === "acc", fit = S.traceKind === "fit";
+  const qi = S.traceKind === "loss" ? 2 : fit ? 3 : 1, qName = qi === 2 ? "training loss" : fit ? (isAcc ? "accuracy, %" : "error vs true, %") : "defect";
+  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to trace the ${fit ? (isAcc ? "accuracy" : "error") : qName} against t</text>`; return; }
+  const sc = fit ? 100 : 1;
+  runs.forEach((rn) => {
+    rn.q = rn.pts.map((p) => [p[0], (p[qi] ?? NaN) * sc]).filter((p) => isFinite(p[1]));
+    rn.q2 = fit ? rn.pts.map((p) => [p[0], p[4] === null || p[4] === undefined ? NaN : p[4] * sc]).filter((p) => isFinite(p[1])) : [];
+    if (rn.q2.length && rn.q2.every((p, k) => Math.abs(p[1] - (rn.q[k]?.[1] ?? NaN)) < 1e-9)) rn.q2 = []; // same data: one line
+  });
   let tMax = 0, yMax = 0, yMin = Infinity;
-  runs.forEach((rn) => rn.q.forEach(([x, y]) => { tMax = Math.max(tMax, x); yMax = Math.max(yMax, y); yMin = Math.min(yMin, y); }));
-  const logy = yMin > 0 && yMax / yMin > 8;
-  const fy = (y) => (logy ? Math.log10(y) : y), y0 = logy ? Math.log10(yMin) - 0.05 : 0, y1 = logy ? Math.log10(yMax) + 0.1 : yMax * 1.08;
+  runs.forEach((rn) => rn.q.concat(rn.q2).forEach(([x, y]) => { tMax = Math.max(tMax, x); yMax = Math.max(yMax, y); yMin = Math.min(yMin, y); }));
+  if (fit && isAcc) { yMax = 100; yMin = Math.min(yMin, 50); }
+  const logy = !(fit && isAcc) && yMin > 0 && yMax / yMin > 8;
+  const fy = (y) => (logy ? Math.log10(y) : y), accAx = fit && isAcc, y0 = logy ? Math.log10(yMin) - 0.05 : accAx ? Math.floor(yMin / 10) * 10 : 0, y1 = logy ? Math.log10(yMax) + 0.1 : accAx ? 100 : yMax * 1.08;
   const X = (x) => l + ((W - l - r) * x) / (tMax || 1), Y = (y) => t + (H - t - bt) * (1 - (fy(y) - y0) / ((y1 - y0) || 1));
   let s = `<line x1="${l}" x2="${W - r}" y1="${H - bt}" y2="${H - bt}" stroke="${PAL.line}"/><line x1="${l}" x2="${l}" y1="${t}" y2="${H - bt}" stroke="${PAL.line}"/>`;
   s += `<text x="${W - r}" y="${H - 6}" text-anchor="end">t = ${tMax.toFixed(1)}</text><text x="${l}" y="${H - 6}">0</text>`;
-  s += `<text x="${l - 4}" y="${t + 8}" text-anchor="end">${fmt(logy ? Math.pow(10, y1) : y1)}</text><text x="${l - 4}" y="${H - bt}" text-anchor="end">${logy ? fmt(Math.pow(10, y0)) : "0"}</text>`;
+  s += `<text x="${l - 4}" y="${t + 8}" text-anchor="end">${fmt(logy ? Math.pow(10, y1) : y1)}</text><text x="${l - 4}" y="${H - bt}" text-anchor="end">${logy ? fmt(Math.pow(10, y0)) : fmt(y0)}</text>`;
   runs.forEach((rn, i) => {
     const col = rn.which === "c" ? PAL.c : PAL.b, dash = rn.mode === "fixed" ? "5 3" : "";
     s += `<path d="${rn.q.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="${dash}" opacity="${i === runs.length - 1 ? 1 : 0.6}"/>`;
+    if (rn.q2.length) s += `<path d="${rn.q2.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="1.5 2.5" stroke-linecap="round" opacity="${i === runs.length - 1 ? 0.9 : 0.5}"/>`;
     s += `<text x="${l + 6}" y="${t + 10 + 12 * i}" style="fill:${col}">${rn.label}</text>`;
   });
   s += `<text x="${W - r}" y="${t + 8}" text-anchor="end">${qName}${logy ? " (log)" : ""}</text>`;
+  if (fit && runs.some((rn) => rn.q2.length)) s += `<text x="${W - r}" y="${t + 20}" text-anchor="end">solid: everywhere · dotted: where trained</text>`;
+  svg.innerHTML = s;
+}
+
+// a walk as a path in the (defect, training loss) plane, log axes when the range is wide
+function drawPlane(svg, runs) {
+  const W = 300, H = 150, l = 46, r = 10, t = 10, bt = 22;
+  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to see what symmetry costs the fit</text>`; return; }
+  runs.forEach((rn) => { rn.q = rn.pts.filter((p) => isFinite(p[1]) && isFinite(p[2])).map((p) => [p[1], p[2]]); });
+  const ax = (vals) => {
+    let lo = Infinity, hi = 0; for (const v of vals) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const lg = lo > 0 && hi / lo > 8, f = (v) => (lg ? Math.log10(v) : v);
+    const a = lg ? Math.log10(lo) - 0.08 : 0, b = lg ? Math.log10(hi) + 0.08 : hi * 1.08 || 1;
+    return { lg, a, b, f, lab: (u) => fmt(lg ? Math.pow(10, u) : u) };
+  };
+  const all = runs.flatMap((rn) => rn.q), xa = ax(all.map((p) => p[0])), ya = ax(all.map((p) => p[1]));
+  const X = (v) => l + ((W - l - r) * (xa.f(v) - xa.a)) / ((xa.b - xa.a) || 1), Y = (v) => t + (H - t - bt) * (1 - (ya.f(v) - ya.a) / ((ya.b - ya.a) || 1));
+  let s = `<line x1="${l}" x2="${W - r}" y1="${H - bt}" y2="${H - bt}" stroke="${PAL.line}"/><line x1="${l}" x2="${l}" y1="${t}" y2="${H - bt}" stroke="${PAL.line}"/>`;
+  s += `<text x="${l}" y="${H - 6}">${xa.lab(xa.a)}</text><text x="${W - r}" y="${H - 6}" text-anchor="end">${xa.lab(xa.b)}</text><text x="${(l + W - r) / 2}" y="${H - 6}" text-anchor="middle">defect${xa.lg ? " (log)" : ""}</text>`;
+  s += `<text x="${l - 4}" y="${t + 8}" text-anchor="end">${ya.lab(ya.b)}</text><text x="${l - 4}" y="${H - bt}" text-anchor="end">${ya.lab(ya.a)}</text>`;
+  runs.forEach((rn, i) => {
+    if (!rn.q.length) return;
+    const col = rn.which === "c" ? PAL.c : PAL.b, dash = rn.mode === "fixed" ? "5 3" : "", op = i === runs.length - 1 ? 1 : 0.6;
+    s += `<path d="${rn.q.map(([x, y], k) => (k ? "L" : "M") + X(x).toFixed(1) + "," + Y(y).toFixed(1)).join("")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="${dash}" opacity="${op}"/>`;
+    const [x0, y0] = rn.q[0], [x1, y1] = rn.q[rn.q.length - 1];
+    s += `<circle cx="${X(x0).toFixed(1)}" cy="${Y(y0).toFixed(1)}" r="3.2" fill="${PAL.panel}" stroke="${col}" stroke-width="1.4" opacity="${op}"/><circle cx="${X(x1).toFixed(1)}" cy="${Y(y1).toFixed(1)}" r="2.8" fill="${col}" opacity="${op}"/>`;
+    s += `<text x="${W - r}" y="${t + 10 + 12 * i}" text-anchor="end" style="fill:${col}">${rn.label}</text>`;
+  });
+  s += `<text x="${l + 6}" y="${t + 8}">training loss${ya.lg ? " (log)" : ""}</text>`;
   svg.innerHTML = s;
 }
 
@@ -839,6 +911,7 @@ function drawCoef() {
   const l = 60, r = 12, t = 10, bt = 38, font = "11px " + cssVar("--f-mono");
   ctx.font = font; ctx.fillStyle = PAL.muted;
   if (!S.attrib) { ctx.textAlign = "center"; ctx.fillText("Solving the lift…", w / 2, h / 2); COEFG = null; return; }
+  if (S.attrib.defect < 1e-9) { ctx.textAlign = "center"; ctx.fillText("δ = 0 and η = 0 for this group:", w / 2, h / 2 - 9); ctx.fillText("nothing to lift", w / 2, h / 2 + 9); COEFG = null; return; }
   const P = S.net.P, cA = S.attrib.c, bA = S.attrib.b;
   let mx = 0, mn = Infinity;
   for (let i = 0; i < P; i++) for (const v of [Math.abs(cA[i]), Math.abs(bA[i])]) { if (v > mx) mx = v; if (v > 0 && v < mn) mn = v; }
@@ -904,7 +977,7 @@ function makeScoreSets() {
     SCORE = { all: mk(360), wedge: mk(cfg.wedge) };
   } else if (cfg.score === "orbit") {
     // the training positions, regenerated exactly as in training (leapfrog, dt = 1e-3, a point every 25 steps), with the true force
-    const spec = S.key === "twobody_arcs" ? [[0.9, 0.55, 0, 1], [0.7, 0.6, 0, 1], [0.5, 0.7, 0, 1]]
+    const spec = S.key === "twobody_arcs" || cfg.orbits === "arcs" ? [[0.9, 0.55, 0, 1], [0.7, 0.6, 0, 1], [0.5, 0.7, 0, 1]]
       : Array.from({ length: 24 }, (_, k) => [[0.9, 0.75, 0.6, 0.45][k % 4], [0.5, 0.65, 0.8][k % 3], 15 * k, 2]);
     const data = []; for (const s of spec) for (const [x, y] of keplerOrbit(...s)) data.push([x, y, ...trueForce2b(x, y)]);
     const all = []; for (let k = 0; k < 1500; k++) { const r = Math.sqrt(0.01 + 0.99 * rnd()), a = 2 * Math.PI * rnd(), x = r * Math.cos(a), y = r * Math.sin(a); all.push([x, y, ...trueForce2b(x, y)]); }
@@ -930,17 +1003,23 @@ function keplerOrbit(rApo, frac, deg, halves) {
   }
   return pts;
 }
-function scores() {
+// [fit over the whole domain, fit on the training region (null if there is none)], as fractions:
+// accuracy for classifiers, relative error vs the true field for regressions
+function scoresNum(th) {
   const cfg = SYS[S.key];
-  if (cfg.score === "acc") { const acc = (pts) => { let ok = 0; for (const [x, y, lab] of pts) ok += ((S.sys.value(S.theta, x, y) > 0) ? 1 : 0) === lab ? 1 : 0; return ok / pts.length; };
-    return [(100 * acc(SCORE.all)).toFixed(1) + "%", (100 * acc(SCORE.wedge)).toFixed(1) + "%"]; }
-  if (cfg.score === "fit") { const rel = (pts) => { let e = 0, s = 0; for (const [x, y, v] of pts) { e += (S.sys.value(S.theta, x, y) - v) ** 2; s += v * v; } return Math.sqrt(e / s); };
-    return [(100 * rel(SCORE.all)).toFixed(2) + "%", (100 * rel(SCORE.wedge)).toFixed(2) + "%"]; }
-  if (cfg.score === "orbit") { const t = new Float64Array(2), rel = (pts) => { let e = 0, s = 0; for (const [x, y, fx, fy] of pts) { S.sys.field(S.theta, x, y, t); e += (t[0] - fx) ** 2 + (t[1] - fy) ** 2; s += fx * fx + fy * fy; } return Math.sqrt(e / s); };
-    return [(100 * rel(SCORE.all)).toFixed(1) + "%", (100 * rel(SCORE.wedge)).toFixed(1) + "%"]; }
+  if (cfg.score === "acc") { const acc = (pts) => { let ok = 0; for (const [x, y, lab] of pts) ok += ((S.sys.value(th, x, y) > 0) ? 1 : 0) === lab ? 1 : 0; return ok / pts.length; };
+    return [acc(SCORE.all), acc(SCORE.wedge)]; }
+  if (cfg.score === "fit") { const rel = (pts) => { let e = 0, s = 0; for (const [x, y, v] of pts) { e += (S.sys.value(th, x, y) - v) ** 2; s += v * v; } return Math.sqrt(e / s); };
+    return [rel(SCORE.all), rel(SCORE.wedge)]; }
+  if (cfg.score === "orbit") { const t = new Float64Array(2), rel = (pts) => { let e = 0, s = 0; for (const [x, y, fx, fy] of pts) { S.sys.field(th, x, y, t); e += (t[0] - fx) ** 2 + (t[1] - fy) ** 2; s += fx * fx + fy * fy; } return Math.sqrt(e / s); };
+    return [rel(SCORE.all), rel(SCORE.wedge)]; }
   const pr = C.polarProbe(15, 32, 1), t = new Float64Array(2); let e = 0, s = 0;
-  for (const [x, y] of pr) { S.sys.field(S.theta, x, y, t); const k = -(S.alpha + x * x + y * y); e += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; s += (k * x) ** 2 + (k * y) ** 2; }
-  return [(100 * Math.sqrt(e / s)).toFixed(1) + "%", ""];
+  for (const [x, y] of pr) { S.sys.field(th, x, y, t); const k = -(S.alpha + x * x + y * y); e += (t[0] - k * x) ** 2 + (t[1] - k * y) ** 2; s += (k * x) ** 2 + (k * y) ** 2; }
+  return [Math.sqrt(e / s), null];
+}
+function scores() {
+  const [a, b] = scoresNum(S.theta), d = SYS[S.key].score === "fit" ? 2 : 1, f = (v) => (v === null ? "" : (100 * v).toFixed(d) + "%");
+  return [f(a), f(b)];
 }
 // the network's training objective on a sample from its training distribution
 function lossOf(th) {
@@ -963,13 +1042,14 @@ function stateFor(th, n, eta) {
 function updateReadouts() {
   const cfg = SYS[S.key], d = stateFor(S.theta, S.group, false).defect;
   $("ro-defect-k").textContent = `equivariance defect ‖δ‖ / ‖f‖, G = ${gName(S.group)}`;
-  $("ro-defect").textContent = fmt(d);
+  $("ro-defect").textContent = d < 1e-9 ? "≈ 0 (" + fmt(d) + ")" : fmt(d);
   let dd = 0, n0 = 0; for (let i = 0; i < S.theta.length; i++) { dd += (S.theta[i] - S.theta0[i]) ** 2; n0 += S.theta0[i] ** 2; }
   $("ro-dist").textContent = fmt(Math.sqrt(dd / n0));
   const [s1, s2] = scores(); $("ro-s1").textContent = s1; $("ro-s2").textContent = s2;
   $("ro-loss").textContent = fmt(lossOf(S.theta));
   const fresh = S.attrib && S.attribFor === S.version;
-  if (S.attrib) { $("ro-res").innerHTML = `${S.attrib.resC.toFixed(3)} <small>/</small> ${S.attrib.resB.toFixed(3)}${fresh ? "" : " <small>…</small>"}`; $("ro-rank").innerHTML = `${S.attrib.rank}${fresh ? "" : " <small>…</small>"}`; }
+  if (S.attrib && S.attrib.defect < 1e-9) { $("ro-res").innerHTML = "<small>– (δ = η = 0)</small>"; $("ro-rank").innerHTML = `${S.attrib.rank}`; }
+  else if (S.attrib) { $("ro-res").innerHTML = `${S.attrib.resC.toFixed(3)} <small>/</small> ${S.attrib.resB.toFixed(3)}${fresh ? "" : " <small>…</small>"}`; $("ro-rank").innerHTML = `${S.attrib.rank}${fresh ? "" : " <small>…</small>"}`; }
   else { $("ro-res").innerHTML = "<small>solving…</small>"; $("ro-rank").innerHTML = "<small>…</small>"; }
   if (cfg.groups.length > 1) {
     const ds = cfg.groups.map((n) => [n, stateFor(S.theta, n, false).defect]), mx = Math.max(...ds.map((q) => q[1]), 1e-12);
@@ -1042,7 +1122,8 @@ function lockControls(on) {
 async function walk(opts = {}) {
   if (S.walking) return;
   const which = opts.which || S.which, mode = opts.mode || S.mode, free = opts.free || S.free, dt = opts.dt || S.dt, T = opts.T || S.T;
-  if (S.hist.length > 1) { S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss]), which: S.hist.which, mode: S.hist.mode }); if (S.runs.length > 4) S.runs.shift(); }
+  if (S.hist.length > 1) { S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss, ...h.fit]), which: S.hist.which, mode: S.hist.mode }); if (S.runs.length > 4) S.runs.shift(); }
+  if (stateFor(S.theta, S.group, false).defect < 1e-9) { status("This network is invariant under G by construction: δ = 0 and η = 0, so there is nothing to lift." + (SYS[S.key].groups.length > 1 ? " Choose a larger group to see a non-zero defect." : ""), false); return; }
   S.walking = true; S.stop = false; lockControls(true);
   let mask = null;
   if (free === "group") {
@@ -1051,7 +1132,7 @@ async function walk(opts = {}) {
   }
   const nSteps = Math.max(1, Math.round(T / dt));
   const d0 = updateReadouts();
-  S.hist = [{ t: 0, defect: d0, loss: lossOf(S.theta), prof: profileAt(S.theta, averager(S.theta)) }];
+  S.hist = [{ t: 0, defect: d0, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)) }];
   Object.assign(S.hist, { which, mode, free });
   let v0 = null, plateau = false;
   const pgStart = opts.adaptive && which === "b" ? averager(S.theta.slice()) : null;
@@ -1076,7 +1157,7 @@ async function walk(opts = {}) {
       if (!ok) { S.theta.set(base); break; }
       t += hk; h = Math.min(dt, hk * 1.5);
       S.version++;
-      S.hist.push({ t, defect: dNow, loss: lossOf(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
+      S.hist.push({ t, defect: dNow, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
       markDirty(true);
       if (opts.until && dNow <= opts.until * d0) break;
       // Plateau: less than a 10% drop over the last two units of t.
@@ -1097,7 +1178,7 @@ async function walk(opts = {}) {
     for (let i = 0; i < S.theta.length; i++) S.theta[i] += dt * dir[i];
     S.version++;
     const dNow = stateFor(S.theta, S.group, false).defect;
-    S.hist.push({ t: k * dt, defect: dNow, loss: lossOf(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
+    S.hist.push({ t: k * dt, defect: dNow, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
     markDirty(true);
     if (opts.until && dNow <= opts.until * d0) break;
     await new Promise((r) => setTimeout(r, mode === "fixed" ? 40 : 0));
@@ -1141,7 +1222,8 @@ function bind() {
   pair("w-c", "w-b", (x) => (S.which = x ? "c" : "b"));
   pair("m-res", "m-fix", (x) => (S.mode = x ? "resolved" : "fixed"));
   pair("free-all", "free-grp", (x) => (S.free = x ? "all" : "group"));
-  pair("tr-defect", "tr-loss", (x) => { S.traceKind = x ? "defect" : "loss"; markDirty(); });
+  const TR = [["tr-defect", "defect"], ["tr-loss", "loss"], ["tr-fit", "fit"], ["tr-plane", "plane"]];
+  for (const [id, kind] of TR) $(id).onclick = () => { S.traceKind = kind; for (const [b] of TR) $(b).setAttribute("aria-pressed", b === id); markDirty(); };
   $("g-norm").onclick = () => setGauge("norm"); $("g-raw").onclick = () => setGauge("raw");
   $("wT").oninput = (e) => { S.T = +e.target.value; $("wT-val").textContent = S.T.toFixed(1); };
   $("w-dt").onchange = (e) => { S.dt = +e.target.value; };
@@ -1158,7 +1240,7 @@ function bind() {
     S.runs = []; S.hist = []; back();
     await walk({ which, mode: "fixed" });
     if (S.stop) return;
-    S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss]), which, mode: "fixed" });
+    S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss, ...h.fit]), which, mode: "fixed" });
     S.hist = []; back();
     await walk({ which, mode: "resolved" });
   };
@@ -1167,6 +1249,7 @@ function bind() {
   $("alpha").oninput = (e) => { S.alpha = +e.target.value; $("alpha-val").textContent = S.alpha.toFixed(2).replace("-", "−"); computeBase(); changed(); };
   $("lock-scale").onchange = (e) => { S.lock = e.target.checked; markDirty(); };
   $("show-probe").onchange = (e) => { S.probe = e.target.checked; markDirty(); };
+  $("sum-all").onchange = () => markSummary();
   $("show-data").onchange = (e) => { S.data = e.target.checked; markDirty(); };
   try { const c = localStorage.getItem("sll-colour"); if (c && [...$("colour-style").options].some((o) => o.value === c)) { S.colour = c; $("colour-style").value = c; } } catch (e) {}
   $("colour-style").onchange = (e) => { S.colour = e.target.value; try { localStorage.setItem("sll-colour", S.colour); } catch (er) {} markDirty(); };
@@ -1201,7 +1284,7 @@ function bind() {
   });
   fieldCv.addEventListener("mouseleave", () => { $("hover-ro").hidden = true; });
   window.addEventListener("resize", () => markDirty(true));
-  window.addEventListener("hashchange", () => { const k = Object.keys(SYS).find((q) => "#" + SYS[q].hash === location.hash); if (k && k !== S.key) setSystem(k, true); });
+  window.addEventListener("hashchange", applyHash);
   const repal = () => { PAL = null; readPalette(); markDirty(true); };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", repal);
   new MutationObserver(repal).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -1209,7 +1292,7 @@ function bind() {
 
 // ------------------------------------------------------------------ loss-vs-defect table
 const TRY = {
-  annulus_wedge90: "Press <b>Restore symmetry</b> and compare the accuracy over all angles before and after. Then load the <b>init</b> stage and look at the lift residuals.",
+  annulus_wedge90: "Press <b>Restore symmetry</b>, then switch the trace to <b>fit</b>. The defect falls but so does the accuracy: the symmetrised network P<sub>ℰ</sub>f puts every point in one class (50%), because the average over angles is dominated by the large wrong logits outside the wedge. Compare the <b>equivariant net</b> trained on the same wedge.",
   annulus_wedge360: "Walk along <b>c*</b>: the network is already nearly rotation-invariant, so the rotation barely changes the field.",
   mexican_hat: "Move <b>α</b> through zero, where the single well becomes a Mexican hat, and watch the lift residuals and the coefficient plot.",
   c6_wedge120: "Switch the group between <b>C₂, C₃, C₆</b> and <b>SO(2)</b>. Same network, different target: the defect and the residuals change with it.",
@@ -1217,6 +1300,10 @@ const TRY = {
   spiral_wedge120: "Press <b>Restore symmetry</b> with C₃ and compare the accuracy on the whole disc. Then choose <b>C₆</b>: its average mixes the two classes.",
   spiral_wedge360: "Walk along <b>c*</b> to t = 1 (57°). Close to 60° the classes swap, so the accuracy falls while the defect hardly moves.",
   twobody_arcs: "Press <b>Restore symmetry</b> and watch two readouts: the force error over the whole disc falls while the training loss rises. Then switch the trace to <b>training loss</b>.",
+  annulus_eq: "Compare with the <b>90° wedge</b> network: the same data and loss, but the symmetry is built in, so the accuracy over all angles matches the training wedge. Walks have nothing to do: δ = η = 0.",
+  c6_eq: "Pick <b>SO(2)</b>: the network is six-fold symmetric by construction but not rotation-invariant, so now δ and the lifts are non-zero.",
+  spiral_eq: "Pick <b>C₆</b> or <b>SO(2)</b>: built-in C₃ symmetry leaves a non-zero defect for the larger groups, and the lifts work as usual.",
+  twobody_eq: "Same three half orbits as the first network, but the potential can only depend on ‖q‖²: compare the force error over the whole disc.",
   twobody_orbits: "Compare with <b>3 half orbits</b>: about the same training loss, but a defect 200 times smaller. Then <b>Add noise</b> to a group and restore it.",
 };
 const FAM_NAME = { annulus: "Annulus classifier", mexican: "Mexican hat", sixfold: "Six-fold potential", spiral: "Spiral classifier", twobody: "Two-body" };
@@ -1227,14 +1314,35 @@ function buildSummary() {
     S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
     makeScoreSets();
     const g = cfg.group ?? cfg.groups[0], [s1, s2] = scores();
-    rows.push({ k, f, g, label: cfg.label || (f === "mexican" ? "trajectories" : ""), loss: lossOf(S.theta), s1, s2, defect: stateFor(S.theta, g, false).defect });
+    const hist = [];
+    for (const [st] of STAGES) {
+      const wk = st === "trained" ? k : k + "@" + st; if (!S.weights[wk]) continue;
+      S.net = C.makeNet(S.weights[wk]); S.theta = S.net.theta; S.sys = cfg.kind === "scalar" ? C.scalarSystem(S.net) : C.forceSystem(S.net, () => S.alpha);
+      hist.push({ st, loss: lossOf(S.theta), defect: stateFor(S.theta, g, false).defect });
+    }
+    const fin = hist[hist.length - 1];
+    rows.push({ k, f, g, label: cfg.trained || cfg.label || (f === "mexican" ? "trajectories" : ""), eq: !!cfg.eq, loss: fin.loss, s1, s2, defect: fin.defect, hist });
   }
   S.key = keep.key; S.net = keep.net; S.sys = keep.sys; S.theta = keep.theta; SCORE = keep.score;
-  $("summary").tBodies[0].innerHTML = rows.map((r) => `<tr data-k="${r.k}"><td>${FAM_NAME[r.f]}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td></tr>`).join("");
+  $("summary").tBodies[0].innerHTML = rows.map((r) => `<tr data-k="${r.k}" data-f="${r.f}"><td>${FAM_NAME[r.f]}${r.eq ? ' <small class="eqtag">equivariant net</small>' : ""}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.defect < 1e-9 ? "≈ 0" : fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td>${spark(r.hist)}</td></tr>`).join("");
   for (const tr of $("summary").tBodies[0].rows) tr.onclick = () => { if (S.walking) return; setSystem(tr.dataset.k); window.scrollTo({ top: 0, behavior: "smooth" }); };
   markSummary();
 }
-function markSummary() { for (const tr of $("summary").tBodies[0].rows) tr.classList.toggle("cur", tr.dataset.k === S.key); }
+// loss (dashed) and defect (solid) across the saved training stages, each on its own log scale
+function spark(hist) {
+  if (hist.length < 2) return '<span class="hint">–</span>';
+  const W = 64, H = 18, line = (vals, dash) => {
+    const lv = vals.map((v) => Math.log10(Math.max(v, 1e-12))), lo = Math.min(...lv), hi = Math.max(...lv), sp = Math.max(hi - lo, 0.3);
+    return `<polyline points="${lv.map((v, i) => `${(2 + (i * (W - 4)) / (lv.length - 1)).toFixed(1)},${(2 + (H - 4) * (1 - (v - lo) / sp)).toFixed(1)}`).join(" ")}" fill="none" stroke="currentColor" stroke-width="${dash ? 1 : 1.6}" ${dash ? 'stroke-dasharray="3 2" opacity="0.55"' : ""}/>`;
+  };
+  const tip = hist.map((h) => `${h.st === "early" ? "2%" : h.st === "mid" ? "10%" : h.st}: loss ${fmt(h.loss)}, defect ${fmt(h.defect)}`).join("\n");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><title>${tip}</title>${line(hist.map((h) => h.loss), true)}${hist.every((h) => h.defect < 1e-9) ? "" : line(hist.map((h) => h.defect), false)}</svg>`;
+}
+function markSummary() {
+  const all = $("sum-all").checked, fam = SYS[S.key].fam;
+  $("sum-spiral").hidden = !all && fam !== "spiral";
+  for (const tr of $("summary").tBodies[0].rows) { tr.classList.toggle("cur", tr.dataset.k === S.key); if (tr.dataset.f) tr.hidden = !all && tr.dataset.f !== fam; }
+}
 
 // ------------------------------------------------------------------ boot
 (async function boot() {
@@ -1243,8 +1351,7 @@ function markSummary() { for (const tr of $("summary").tBodies[0].rows) tr.class
   worker = new Worker("worker.js");
   worker.onmessage = (ev) => { const r = pending.get(ev.data.id); if (r) { pending.delete(ev.data.id); r(ev.data); } };
   worker.postMessage({ cmd: "init", weights: S.weights });
-  const start = Object.keys(SYS).find((q) => "#" + SYS[q].hash === location.hash) || "annulus_wedge90";
-  setSystem(start, true);
+  if (!applyHash()) setSystem("annulus_wedge90", true);
   setTimeout(buildSummary, 50);
 })();
 </script>

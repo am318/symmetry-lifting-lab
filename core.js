@@ -8,8 +8,23 @@
   // ---------------------------------------------------------------- SiLU MLP
   const sig = (z) => 1 / (1 + Math.exp(-z));
 
-  function makeNet(layers) {
-    // layers: [{W: [[...]] (out x in), b: [...]}]; flat params in PyTorch order (W then b, per layer)
+  // Group-invariant input maps for equivariant-by-construction networks, with their forward-mode tangents.
+  // "r2": (x^2 + y^2) [, alpha];  "c<n>": (r, cos n phi, sin n phi). Writes features into h and tangents into hd.
+  function featureMap(kind) {
+    if (kind === "r2") return (x, u, h, hd) => { h[0] = x[0] * x[0] + x[1] * x[1]; hd[0] = u ? 2 * (x[0] * u[0] + x[1] * u[1]) : 0; };
+    const n = +kind.slice(1);
+    return (x, u, h, hd) => {
+      const r = Math.hypot(x[0], x[1]), p = Math.atan2(x[1], x[0]), c = r > 0 ? Math.cos(n * p) : 1, s = r > 0 ? Math.sin(n * p) : 0;
+      h[0] = r; h[1] = c; h[2] = s;
+      if (u && r > 0) { const dr = (x[0] * u[0] + x[1] * u[1]) / r, dp = (x[0] * u[1] - x[1] * u[0]) / (r * r); hd[0] = dr; hd[1] = -n * s * dp; hd[2] = n * c * dp; }
+      else { hd[0] = 0; hd[1] = 0; hd[2] = 0; }
+    };
+  }
+
+  function makeNet(spec) {
+    // spec: [{W: [[...]] (out x in), b: [...]}] (an MLP on the raw inputs), or {feat, layers} for an MLP on
+    // group-invariant features of the inputs; flat params in PyTorch order (W then b, per layer)
+    const layers = Array.isArray(spec) ? spec : spec.layers, feat = Array.isArray(spec) ? null : featureMap(spec.feat);
     const shapes = layers.map((l) => [l.W.length, l.W[0].length]);
     const P = shapes.reduce((s, [o, i]) => s + o * i + o, 0);
     const theta = new Float64Array(P);
@@ -34,8 +49,8 @@
 
     // forward with one input tangent u; returns [v, vdot]
     function forward(th, x, u) {
-      const nIn = offs[0].i;
-      for (let j = 0; j < nIn; j++) { H[0][j] = x[j]; Hd[0][j] = u ? u[j] : 0; }
+      if (feat) feat(x, u, H[0], Hd[0]);
+      else { const nIn = offs[0].i; for (let j = 0; j < nIn; j++) { H[0][j] = x[j]; Hd[0][j] = u ? u[j] : 0; } }
       let v = 0, vd = 0;
       for (let l = 0; l < L; l++) {
         const { wOff, bOff, o, i } = offs[l];
@@ -83,7 +98,7 @@
         }
       }
     }
-    return { theta, P, offs, forward, backward, shapes };
+    return { theta, P, offs, forward, backward, shapes, feat: Array.isArray(spec) ? null : spec.feat };
   }
 
   // ---------------------------------------------------------------- systems
