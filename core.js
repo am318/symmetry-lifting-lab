@@ -266,18 +266,21 @@
       d[i] = h;
     }
     d[0] = 0; e[0] = 0;
+    const g = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       const l = i - 1;
-      if (d[i]) {
-        for (let j = 0; j <= l; j++) {
-          let g = 0;
-          for (let k = 0; k <= l; k++) g += a[i][k] * a[k][j];
-          for (let k = 0; k <= l; k++) a[k][j] -= g * a[k][i];
-        }
+      if (d[i]) { // row-wise form of the accumulation (same arithmetic, contiguous access)
+        const ai = a[i];
+        g.fill(0, 0, l + 1);
+        for (let k = 0; k <= l; k++) { const w = ai[k], ak = a[k]; if (w) for (let j = 0; j <= l; j++) g[j] += w * ak[j]; }
+        for (let k = 0; k <= l; k++) { const w = a[k][i], ak = a[k]; if (w) for (let j = 0; j <= l; j++) ak[j] -= g[j] * w; }
       }
       d[i] = a[i][i]; a[i][i] = 1;
       for (let j = 0; j <= l; j++) a[j][i] = a[i][j] = 0;
     }
+    // QL on the transposed vectors: Z[j] is column j of a, so each rotation touches two contiguous rows
+    const Z = [];
+    for (let j = 0; j < n; j++) { const z = new Float64Array(n); for (let k = 0; k < n; k++) z[k] = a[k][j]; Z.push(z); }
     for (let i = 1; i < n; i++) e[i - 1] = e[i];
     e[n - 1] = 0;
     for (let l = 0; l < n; l++) {
@@ -299,15 +302,16 @@
             if (r === 0) { d[i + 1] -= p; e[m] = 0; break; }
             s = f / r; c = g / r; g = d[i + 1] - p; r = (d[i] - g) * s + 2 * c * b;
             d[i + 1] = g + (p = s * r); g = c * r - b;
-            for (let k = 0; k < n; k++) {
-              f = a[k][i + 1]; a[k][i + 1] = s * a[k][i] + c * f; a[k][i] = c * a[k][i] - s * f;
-            }
+            const z0 = Z[i], z1 = Z[i + 1];
+            for (let k = 0; k < n; k++) { f = z1[k]; z1[k] = s * z0[k] + c * f; z0[k] = c * z0[k] - s * f; }
           }
           if (r === 0 && i >= l) continue;
           d[l] -= p; e[l] = g; e[m] = 0;
         }
       } while (m !== l);
     }
+    for (let j = 0; j < n; j++) { const z = Z[j]; for (let k = 0; k < n; k++) a[k][j] = z[k]; }
+    a.vecs = Z; // eigenvectors as rows, for callers that want them that way
     return d;
   }
 
@@ -317,9 +321,8 @@
   // the block, so that path is taken directly (and remembered for the next solve of the same size).
   const bigRank = {};
   function fullEig(K) {
-    const M = K.length, A = K.map((r) => Float64Array.from(r)), lam = symEig(A), U = [];
-    for (let j = 0; j < M; j++) { const u = new Float64Array(M); for (let i = 0; i < M; i++) u[i] = A[i][j]; U.push(u); }
-    return { lam, U };
+    const A = K.map((r) => Float64Array.from(r)), lam = symEig(A);
+    return { lam, U: A.vecs };
   }
   function topEig(K, tau, k0) {
     const M = K.length;
@@ -360,6 +363,51 @@
     }
   }
 
+  // Eigenpairs of K = J J^T without forming K: pivoted Cholesky K ~ L L^T, stopped once every remaining
+  // diagonal entry is below 1e-13 of the largest (far under the tau^2 = 1e-6 eigenvalue cutoff), then the small
+  // eigenproblem of L^T L. Only the pivot columns of K are computed, so the cost scales with the numerical rank.
+  function gram(J) { // K = J J^T, four rows at a time so each row of J is read once per block
+    const M = J.length, P = J[0].length, K = [];
+    for (let m = 0; m < M; m++) K.push(new Float64Array(M));
+    for (let m = 0; m < M; m += 4) {
+      const a0 = J[m], a1 = J[Math.min(m + 1, M - 1)], a2 = J[Math.min(m + 2, M - 1)], a3 = J[Math.min(m + 3, M - 1)];
+      for (let n = 0; n <= Math.min(m + 3, M - 1); n++) {
+        const b = J[n]; let s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+        for (let i = 0; i < P; i++) { const bi = b[i]; s0 += a0[i] * bi; s1 += a1[i] * bi; s2 += a2[i] * bi; s3 += a3[i] * bi; }
+        const S = [s0, s1, s2, s3];
+        for (let t = 0; t < 4 && m + t < M; t++) if (n <= m + t) { K[m + t][n] = S[t]; K[n][m + t] = S[t]; }
+      }
+    }
+    return K;
+  }
+  function gramEig(J) {
+    const M = J.length, d = new Float64Array(M);
+    for (let m = 0; m < M; m++) d[m] = dot(J[m], J[m]);
+    let d0 = 0; for (const v of d) d0 = Math.max(d0, v);
+    const L = [], tol = 1e-13 * d0;
+    while (L.length < M) {
+      if (L.length > M / 3) return fullEig(gram(J)); // nearly full rank: forming K and a dense solve is cheaper
+      let p = 0; for (let m = 1; m < M; m++) if (d[m] > d[p]) p = m;
+      if (!(d[p] > tol)) break;
+      const jp = J[p], col = new Float64Array(M);
+      for (let m = 0; m < M; m++) col[m] = dot(J[m], jp);
+      for (const l of L) { const lp = l[p]; if (lp) for (let m = 0; m < M; m++) col[m] -= lp * l[m]; }
+      const piv = Math.sqrt(d[p]);
+      for (let m = 0; m < M; m++) { col[m] /= piv; d[m] -= col[m] * col[m]; }
+      d[p] = 0; L.push(col);
+    }
+    const q = L.length, B = [];
+    for (let a = 0; a < q; a++) B.push(new Float64Array(q));
+    for (let a = 0; a < q; a++) for (let b = 0; b <= a; b++) { const v = dot(L[a], L[b]); B[a][b] = v; B[b][a] = v; }
+    const lam = symEig(B), U = [];
+    for (let j = 0; j < q; j++) {
+      const u = new Float64Array(M), sj = Math.sqrt(Math.max(lam[j], 1e-300));
+      for (let a = 0; a < q; a++) { const w = B[a][j] / sj; if (w) { const l = L[a]; for (let m = 0; m < M; m++) u[m] += w * l[m]; } }
+      U.push(u);
+    }
+    return { lam, U };
+  }
+
   // Min-norm, tau-truncated lift in the sensitivity-normalised gauge, as in the paper:
   // truncate the SVD of the RAW J at sigma_k >= tau * sigma_1, then among c with Vh_k c = S_k^-1 U_k^T y
   // minimise ||diag(||J_:,i||) c|| (sensitivity-normalised gauge); dead columns get exactly 0.
@@ -376,10 +424,7 @@
     }
     const dead = new Uint8Array(P), cs = new Float64Array(P);
     for (let i = 0; i < P; i++) { dead[i] = !raw && col[i] <= cmax * 1e-8 ? 1 : 0; cs[i] = raw ? 1 : Math.max(col[i], cmax * 1e-8); }
-    const K = [];
-    for (let m = 0; m < M; m++) K.push(new Float64Array(M));
-    for (let m = 0; m < M; m++) for (let n = 0; n <= m; n++) { const v = dot(J[m], J[n]); K[m][n] = v; K[n][m] = v; }
-    const { lam, U } = topEig(K, tau, 64);
+    const { lam, U } = gramEig(J);
     let lmax = 0;
     for (let k = 0; k < lam.length; k++) lmax = Math.max(lmax, lam[k]);
     const keep = [];
@@ -421,6 +466,6 @@
     }).concat([{ colnorm: col, rank: r }]);
   }
 
-  root.SymCore = { cyclicState, ringState, topEig, makeNet, scalarSystem, forceSystem, polarProbe, reynoldsAt, etaAt, probeState, jacobian, lift, symEig, norm, dot };
+  root.SymCore = { cyclicState, ringState, topEig, gramEig, makeNet, scalarSystem, forceSystem, polarProbe, reynoldsAt, etaAt, probeState, jacobian, lift, symEig, norm, dot };
   if (typeof module !== "undefined") module.exports = root.SymCore;
 })(typeof window !== "undefined" ? window : globalThis);

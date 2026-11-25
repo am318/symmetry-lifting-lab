@@ -78,6 +78,8 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var
 .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--f-mono) }
 .legend canvas { height: 8px; width: 150px; border-radius: 2px }
 .hint { color: var(--muted); font-size: 12.5px; margin: 0; line-height: 1.4 }
+.try { font-size: 13px; margin: 8px 0 0; line-height: 1.45; padding: 6px 10px; border-left: 3px solid var(--line); background: var(--soft); border-radius: 0 6px 6px 0 }
+.try b { font-weight: 600 }
 .name { font-size: 13px }
 .sep { border-top: 1px solid var(--line); margin: 3px 0 }
 .status { font-size: 12.5px; color: var(--muted); min-height: 1.4em }
@@ -110,6 +112,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 .math { font-family: var(--f-serif); font-style: italic; font-size: 1.04em }
 .math sub, .math sup { font-style: normal }
 @media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) } .center { grid-column: 1 / -1; order: -1 } }
+@media (max-width: 520px) { #summary th, #summary td { padding: 4px 5px } #summary td:first-child, #summary th:first-child { white-space: normal; min-width: 7em } }
 @media (max-width: 720px) { .grid, .grid2 { grid-template-columns: minmax(0, 1fr) } #net { height: 280px } }
 </style>
 </head>
@@ -209,6 +212,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
         <label for="alpha">stiffness α</label><input type="range" id="alpha" min="-1.1" max="1.1" step="0.05" value="-0.5" style="flex:1;width:auto"><span class="num" id="alpha-val">−0.50</span>
       </div>
       <p class="hint" id="field-hint"></p>
+      <p class="try" id="try-hint"></p>
     </section>
 
     <!-- right: readouts and walk -->
@@ -276,7 +280,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 
   <section class="panel" id="summary-panel">
     <div class="row between"><h2>Training loss is not symmetry</h2><span class="hint">every trained network, at its default group</span></div>
-    <div class="tablewrap"><table id="summary"><thead><tr><th>System</th><th>Trained on</th><th class="n">Training loss</th><th class="n">Fit where trained</th><th class="n">Fit everywhere</th><th class="n">Defect ‖δ‖ / ‖f‖</th></tr></thead><tbody><tr><td colspan="6" class="hint">computing…</td></tr></tbody></table></div>
+    <div class="tablewrap"><table id="summary"><thead><tr><th>System</th><th>Trained on</th><th class="n">Training loss</th><th class="n">Defect ‖δ‖ / ‖f‖</th><th class="n">Fit where trained</th><th class="n">Fit everywhere</th></tr></thead><tbody><tr><td colspan="6" class="hint">computing…</td></tr></tbody></table></div>
     <p class="hint">A network can fit its training data almost perfectly and still be far from equivariant: where the data do not constrain it, nothing pushes it towards ℰ. Compare each pair: the same architecture and loss, trained on part or all of the symmetric domain. Fit is accuracy for classifiers and relative error for regressions; the spiral's label-smoothed loss cannot go below 0.199. Even with full coverage the spiral keeps a sizeable defect: the labels only fix the sign of the logit, not its size away from the boundary. Click a row to open it.</p>
   </section>
 
@@ -406,6 +410,7 @@ function setSystem(key, fromHash) {
     twobody: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Orange dots: the observed positions the network was trained on" + (key === "twobody_arcs" ? ", three half orbits that all start on the +x axis. " : ", 24 orbits spread round the circle. ") + "The true potential is rotation-invariant. Dotted circle: the profile radius.",
     sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Dotted circle: the profile radius.",
   }[cfg.fam];
+  $("try-hint").innerHTML = TRY[key] ? "<b>Try:</b> " + TRY[key] : ""; $("try-hint").hidden = !TRY[key];
   $("ro-s1-k").textContent = { acc: "accuracy, all angles", force: "force error vs true", fit: "error vs true V, whole disc", orbit: "force error vs true, whole disc" }[cfg.score];
   $("ro-s2-k").textContent = { acc: "accuracy, training wedge", fit: "error vs true V, training wedge", force: "", orbit: "force error vs true, on the observed orbits" }[cfg.score];
   $("ro-s2-box").hidden = cfg.score === "force" || cfg.wedge === 360;
@@ -1199,6 +1204,17 @@ function bind() {
 }
 
 // ------------------------------------------------------------------ loss-vs-defect table
+const TRY = {
+  annulus_wedge90: "Press <b>Restore symmetry</b> and compare the accuracy over all angles before and after. Then load the <b>init</b> stage and look at the lift residuals.",
+  annulus_wedge360: "Walk along <b>c*</b>: the network is already nearly rotation-invariant, so the rotation barely changes the field.",
+  mexican_hat: "Move <b>α</b> through zero, where the single well becomes a Mexican hat, and watch the lift residuals and the coefficient plot.",
+  c6_wedge120: "Switch the group between <b>C₂, C₃, C₆</b> and <b>SO(2)</b>. Same network, different target: the defect and the residuals change with it.",
+  c6_wedge360: "Pick <b>SO(2)</b>. The network is six-fold symmetric but not rotation-invariant, so restoring SO(2) has to change the function, not just tidy it.",
+  spiral_wedge120: "Press <b>Restore symmetry</b> with C₃ and compare the accuracy on the whole disc. Then choose <b>C₆</b>: its average mixes the two classes.",
+  spiral_wedge360: "Walk along <b>c*</b> to t = 1 (57°). Close to 60° the classes swap, so the accuracy falls while the defect hardly moves.",
+  twobody_arcs: "Press <b>Restore symmetry</b> and watch two readouts: the force error over the whole disc falls while the training loss rises. Then switch the trace to <b>training loss</b>.",
+  twobody_orbits: "Compare with <b>3 half orbits</b>: about the same training loss, but a defect 200 times smaller. Then <b>Add noise</b> to a group and restore it.",
+};
 const FAM_NAME = { annulus: "Annulus classifier", mexican: "Mexican hat", sixfold: "Six-fold potential", spiral: "Spiral classifier", twobody: "Two-body" };
 function buildSummary() {
   const keep = { key: S.key, net: S.net, sys: S.sys, theta: S.theta, score: SCORE }, rows = [];
@@ -1210,7 +1226,7 @@ function buildSummary() {
     rows.push({ k, f, g, label: cfg.label || (f === "mexican" ? "trajectories" : ""), loss: lossOf(S.theta), s1, s2, defect: stateFor(S.theta, g, false).defect });
   }
   S.key = keep.key; S.net = keep.net; S.sys = keep.sys; S.theta = keep.theta; SCORE = keep.score;
-  $("summary").tBodies[0].innerHTML = rows.map((r) => `<tr data-k="${r.k}"><td>${FAM_NAME[r.f]}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td class="n">${fmt(r.defect)} <small>${gName(r.g)}</small></td></tr>`).join("");
+  $("summary").tBodies[0].innerHTML = rows.map((r) => `<tr data-k="${r.k}"><td>${FAM_NAME[r.f]}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td></tr>`).join("");
   for (const tr of $("summary").tBodies[0].rows) tr.onclick = () => { if (S.walking) return; setSystem(tr.dataset.k); window.scrollTo({ top: 0, behavior: "smooth" }); };
   markSummary();
 }
