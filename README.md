@@ -12,7 +12,11 @@ Pick a trained network, then move its weights and watch the symmetry of what it 
 
 Systems: an annulus classifier (trained on a 90° wedge or on all angles), the learned force of a Mexican-hat Hamiltonian network, a six-fold potential (trained on a 120° wedge or on the whole disc, with C₂, C₃, C₆ or SO(2) as the target group), a three-arm spiral classifier (C₃), and a two-body potential under softened gravity learned from three half orbits or 24 full orbits. Each system with a restricted training set also has an equivariant-by-construction network trained on the same data. Each network can be loaded at initialisation, after 2% and 10% of training, or fully trained, and a table compares every network's training loss with its symmetry defect.
 
-Everything is computed live in the browser in float64: the forward pass, the Jacobian, the truncated pseudo-inverse and the walks. Nothing is sent anywhere.
+After a walk, the **replay** slider moves back along it, so the field, profile and readouts show the weights at any earlier t (and a new walk starts from there); its play button runs the walk again without recomputing it. **Save image** downloads the field as shown, with its colour bar and a caption, and **Full screen** shows the field on the whole screen. The address bar always holds a link to the current view: the system, training stage, symmetry group and field view.
+
+For a screen next to a poster, **Play demo** (at the foot of the page) runs a captioned tour of the systems that loops until someone touches the page or presses a key. Opening https://am318.github.io/symmetry-lifting-lab/?demo starts it automatically, and the page goes back to it after two minutes without input.
+
+Everything is computed live in the browser in float64: the forward pass, the Jacobian, the truncated pseudo-inverse and the walks. Nothing you do on the page is sent anywhere; the only request to another site is for the web fonts (Google Fonts).
 
 ## Files
 
@@ -22,6 +26,8 @@ Everything is computed live in the browser in float64: the forward pass, the Jac
 | `core.js` | networks, Jacobians, Reynolds averages and the lift solver |
 | `worker.js` | runs the lift off the main thread |
 | `weights.json` | the trained networks' weights |
+| `sw.js` | keeps an offline copy: once the page has loaded, it opens again without a connection |
+| `preview.png` | the image shown when a link to the page is shared |
 
 ## Running locally
 

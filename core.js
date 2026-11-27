@@ -348,7 +348,9 @@
 
   // Symmetric eigendecomposition (Householder tridiagonalisation + implicit QL), in place.
   // a: array of Float64Array rows (n x n). Returns eigenvalues d; a becomes eigenvectors (columns).
-  function symEig(a) {
+  // Householder reduction of symmetric a to tridiagonal form, in place. Returns the subdiagonal e (e[i] couples
+  // i and i - 1) and h[i] of each reflector P_i = I - u_i u_i^T / h_i, u_i = a[i][0..i-1]; the diagonal is left on a[i][i].
+  function tridiag(a) {
     const n = a.length, d = new Float64Array(n), e = new Float64Array(n);
     for (let i = n - 1; i > 0; i--) {
       const l = i - 1; let h = 0, scale = 0;
@@ -380,6 +382,10 @@
       } else e[i] = a[i][l];
       d[i] = h;
     }
+    return { d, e };
+  }
+  function symEig(a) {
+    const n = a.length, { d, e } = tridiag(a);
     d[0] = 0; e[0] = 0;
     const g = new Float64Array(n);
     for (let i = 0; i < n; i++) {
@@ -428,6 +434,65 @@
     for (let j = 0; j < n; j++) { const z = Z[j]; for (let k = 0; k < n; k++) a[k][j] = z[k]; }
     a.vecs = Z; // eigenvectors as rows, for callers that want them that way
     return d;
+  }
+
+  // All eigenvalues of symmetric a, but eigenvectors only for those above cut * lam_max. The same reduction and
+  // implicit QL as symEig; the QL rotations are logged and applied afterwards to the wanted vectors only, and the
+  // reflectors are applied to those vectors directly, so the cost of the vectors scales with how many are kept.
+  function symEigSel(a, cut) {
+    const n = a.length, { d: hv, e } = tridiag(a), d = new Float64Array(n);
+    for (let i = 0; i < n; i++) d[i] = a[i][i];
+    for (let i = 1; i < n; i++) e[i - 1] = e[i];
+    e[n - 1] = 0;
+    let cap = 2 * n * n, RI = new Int32Array(cap), RC = new Float64Array(cap), RS = new Float64Array(cap), N = 0;
+    const grow = () => { cap *= 2; const a1 = new Int32Array(cap), a2 = new Float64Array(cap), a3 = new Float64Array(cap); a1.set(RI); a2.set(RC); a3.set(RS); RI = a1; RC = a2; RS = a3; };
+    for (let l = 0; l < n; l++) {
+      let iter = 0, m;
+      do {
+        for (m = l; m < n - 1; m++) {
+          const dd = Math.abs(d[m]) + Math.abs(d[m + 1]);
+          if (Math.abs(e[m]) <= 1e-15 * dd) break;
+        }
+        if (m !== l) {
+          if (iter++ === 60) break;
+          let g = (d[l + 1] - d[l]) / (2 * e[l]);
+          let r = Math.hypot(g, 1);
+          g = d[m] - d[l] + e[l] / (g + (g >= 0 ? Math.abs(r) : -Math.abs(r)));
+          let s = 1, c = 1, p = 0, i;
+          for (i = m - 1; i >= l; i--) {
+            let f = s * e[i]; const b = c * e[i];
+            e[i + 1] = r = Math.hypot(f, g);
+            if (r === 0) { d[i + 1] -= p; e[m] = 0; break; }
+            s = f / r; c = g / r; g = d[i + 1] - p; r = (d[i] - g) * s + 2 * c * b;
+            d[i + 1] = g + (p = s * r); g = c * r - b;
+            if (N === cap) grow();
+            RI[N] = i; RC[N] = c; RS[N] = s; N++;
+          }
+          if (r === 0 && i >= l) continue;
+          d[l] -= p; e[l] = g; e[m] = 0;
+        }
+      } while (m !== l);
+    }
+    let lmax = 0; for (let j = 0; j < n; j++) lmax = Math.max(lmax, d[j]);
+    const want = []; for (let j = 0; j < n; j++) if (d[j] > cut * lmax) want.push(j);
+    const k = want.length, W = [];
+    for (let i = 0; i < n; i++) W.push(new Float64Array(k));
+    want.forEach((j, v) => { W[j][v] = 1; });
+    // row j of R_N ... R_1 (eigenvector j of the tridiagonal matrix): the rotations in reverse, on rows i, i + 1 of W
+    for (let t = N - 1; t >= 0; t--) {
+      const i = RI[t], c = RC[t], s = RS[t], w0 = W[i], w1 = W[i + 1];
+      for (let v = 0; v < k; v++) { const x = w0[v], y = w1[v]; w0[v] = x * c + y * s; w1[v] = y * c - x * s; }
+    }
+    // back to the original basis: x = P_{n-1} ... P_1 y
+    const sv = new Float64Array(k);
+    for (let i = 1; i < n; i++) {
+      const h = hv[i]; if (!h) continue;
+      const u = a[i]; sv.fill(0);
+      for (let q = 0; q < i; q++) { const uq = u[q]; if (uq) { const wq = W[q]; for (let v = 0; v < k; v++) sv[v] += uq * wq[v]; } }
+      for (let q = 0; q < i; q++) { const f = u[q] / h; if (f) { const wq = W[q]; for (let v = 0; v < k; v++) wq[v] -= f * sv[v]; } }
+    }
+    const U = want.map((j, v) => { const x = new Float64Array(n); for (let i = 0; i < n; i++) x[i] = W[i][v]; return x; });
+    return { all: d, lam: Float64Array.from(want, (j) => d[j]), U };
   }
 
   // Top eigenpairs of a symmetric PSD matrix by orthogonalised subspace iteration; grows the block until
@@ -513,20 +578,21 @@
   // sizes M whose last solve was nearly full rank: go straight to the dense path rather than spend M/3 pivoted
   // Cholesky steps first only to abandon them (the result is identical either way, only the cost differs)
   const denseM = {};
-  function denseEig(J, tol) {
-    const res = fullEig(gram(J));
-    let q = 0; for (const l of res.lam) if (l > tol) q++;
+  function denseEig(J, tol, cut) {
+    const res = cut ? symEigSel(gram(J), cut) : fullEig(gram(J));
+    let q = 0; for (const l of res.all || res.lam) if (l > tol) q++;
     denseM[J.length] = q > J.length / 4;
     return res;
   }
-  function gramEig(J) {
+  // cut (optional): only eigenpairs above cut * lam_max are needed (the Cholesky path may still return more)
+  function gramEig(J, cut) {
     const M = J.length, d = new Float64Array(M);
     for (let m = 0; m < M; m++) d[m] = dot(J[m], J[m]);
     let d0 = 0; for (const v of d) d0 = Math.max(d0, v);
     const L = [], tol = 1e-13 * d0;
-    if (denseM[M]) return denseEig(J, tol);
+    if (denseM[M]) return denseEig(J, tol, cut);
     while (L.length < M) {
-      if (L.length > M / 3) return denseEig(J, tol); // nearly full rank: forming K and a dense solve is cheaper
+      if (L.length > M / 3) return denseEig(J, tol, cut); // nearly full rank: forming K and a dense solve is cheaper
       let p = 0; for (let m = 1; m < M; m++) if (d[m] > d[p]) p = m;
       if (!(d[p] > tol)) break;
       const jp = J[p], col = new Float64Array(M), P = jp.length;
@@ -571,19 +637,27 @@
     }
     const dead = new Uint8Array(P), cs = new Float64Array(P);
     for (let i = 0; i < P; i++) { dead[i] = !raw && col[i] <= cmax * 1e-8 ? 1 : 0; cs[i] = raw ? 1 : Math.max(col[i], cmax * 1e-8); }
-    const { lam, U } = gramEig(J);
+    const { lam, U } = gramEig(J, tau * tau * (1 - 1e-9)); // vectors only for what the tau cutoff below keeps
     let lmax = 0;
     for (let k = 0; k < lam.length; k++) lmax = Math.max(lmax, lam[k]);
     const keep = [];
     for (let k = 0; k < lam.length; k++) if (lam[k] > 0 && Math.sqrt(lam[k]) >= tau * Math.sqrt(lmax)) keep.push(k);
     const r = keep.length;
     // Vh_k rows: v_k = J^T u_k / sigma_k ; a_eq = Vh_k / cs (dead -> 0)
-    const aeq = keep.map((k) => {
-      const v = new Float64Array(P), sk = Math.sqrt(lam[k]);
-      for (let m = 0; m < M; m++) { const u = U[k][m] / sk; if (u === 0) continue; const row = J[m]; for (let i = 0; i < P; i++) v[i] += row[i] * u; }
-      for (let i = 0; i < P; i++) v[i] = dead[i] ? 0 : v[i] / cs[i];
-      return v;
-    });
+    // four rows of Vh_k per pass over J, so each row of J is read once for four of them
+    const aeq = keep.map(() => new Float64Array(P));
+    for (let a0 = 0; a0 < r; a0 += 4) {
+      const nb = Math.min(4, r - a0), V = [], Uk = [];
+      for (let t = 0; t < 4; t++) { const a = a0 + Math.min(t, nb - 1); V.push(aeq[a]); Uk.push(U[keep[a]]); }
+      const s0 = 1 / Math.sqrt(lam[keep[a0]]), s1 = 1 / Math.sqrt(lam[keep[a0 + Math.min(1, nb - 1)]]), s2 = 1 / Math.sqrt(lam[keep[a0 + Math.min(2, nb - 1)]]), s3 = 1 / Math.sqrt(lam[keep[a0 + Math.min(3, nb - 1)]]);
+      const v0 = V[0], v1 = V[1], v2 = V[2], v3 = V[3];
+      for (let m = 0; m < M; m++) {
+        const u0 = Uk[0][m] * s0, u1 = nb > 1 ? Uk[1][m] * s1 : 0, u2 = nb > 2 ? Uk[2][m] * s2 : 0, u3 = nb > 3 ? Uk[3][m] * s3 : 0;
+        const row = J[m];
+        for (let i = 0; i < P; i++) { const x = row[i]; v0[i] += x * u0; v1[i] += x * u1; v2[i] += x * u2; v3[i] += x * u3; }
+      }
+    }
+    for (const v of aeq) for (let i = 0; i < P; i++) v[i] = dead[i] ? 0 : v[i] / cs[i];
     // Gram G = a_eq a_eq^T (r x r), Cholesky
     const G = [];
     for (let a = 0; a < r; a++) { G.push(new Float64Array(r)); for (let b = 0; b <= a; b++) G[a][b] = dot(aeq[a], aeq[b]); }
@@ -613,6 +687,6 @@
     }).concat([{ colnorm: col, rank: r }]);
   }
 
-  root.SymCore = { gram, cyclicState, ringState, topEig, gramEig, makeNet, scalarSystem, forceSystem, polarProbe, reynoldsAt, etaAt, probeState, jacobian, lift, symEig, norm, dot };
+  root.SymCore = { gram, symEigSel, tridiag, cyclicState, ringState, topEig, gramEig, makeNet, scalarSystem, forceSystem, polarProbe, reynoldsAt, etaAt, probeState, jacobian, lift, symEig, norm, dot };
   if (typeof module !== "undefined") module.exports = root.SymCore;
 })(typeof window !== "undefined" ? window : globalThis);

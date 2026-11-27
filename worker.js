@@ -1,6 +1,7 @@
 // Lift solver off the main thread: c* = J^+ eta and b* = J^+(-delta) at the posted parameters.
 // m.group: 0 = SO(2) (Reynolds average by quadrature), n > 0 = cyclic group C_n.
 // m.mask (optional Uint8Array): only those parameters are free; the solve uses only their columns of J.
+// A lift that throws or comes out non-finite answers {id, error} instead.
 importScripts("core.js");
 const C = self.SymCore;
 const nets = {};
@@ -12,6 +13,11 @@ self.onmessage = (ev) => {
     return;
   }
   if (m.cmd === "lift") {
+    try { liftOne(m); } catch (e) { self.postMessage({ id: m.id, error: String((e && e.message) || e) }); }
+  }
+};
+
+function liftOne(m) {
     const net = nets[m.key];
     const sys = m.kind === "scalar" ? C.scalarSystem(net) : C.forceSystem(net, () => m.alpha);
     const [nR, nA] = m.probe;
@@ -22,7 +28,7 @@ self.onmessage = (ev) => {
     const mask = m.mask ? new Uint8Array(m.mask) : null;
     const [c, b, info] = C.lift(J, [st.eta, st.delta.map((v) => -v)], 1e-3, !!m.raw, mask);
     const sens = info.colnorm.map((v) => v / Math.sqrt(J.length));
+    if (!c.coef.every(Number.isFinite) || !b.coef.every(Number.isFinite)) throw new Error("non-finite lift");
     self.postMessage({ id: m.id, c: c.coef, b: b.coef, resC: c.residual, resB: b.residual, rank: info.rank, sens, defect: st.defect },
       [c.coef.buffer, b.coef.buffer, sens.buffer]);
-  }
-};
+}

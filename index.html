@@ -2,8 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-uhwG/MBx5Sa1aSwmj8C8c2VcGBPVNNXGgdb5WFljrW4=' 'sha256-jnMfba+oySaSe9ipUCet21BX+OYjhz+zIVmyhEPvW9o='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Parameter-Level Symmetry Attribution</title>
 <meta name="description" content="Interactive companion to Parameter-Level Attribution of Symmetry in Trained Networks: walk a trained network's weights along the symmetry orbit or towards the symmetric functions and watch its output field change.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%230072b2' stroke-width='3'/%3E%3Ccircle cx='16' cy='5' r='3.4' fill='%23e69f00'/%3E%3Ccircle cx='25.53' cy='21.5' r='3.4' fill='%23e69f00'/%3E%3Ccircle cx='6.47' cy='21.5' r='3.4' fill='%23e69f00'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Parameter-Level Symmetry Attribution">
+<meta property="og:description" content="Interactive companion to Parameter-Level Attribution of Symmetry in Trained Networks: walk a trained network's weights along the symmetry orbit or towards the symmetric functions and watch its output field change.">
+<meta property="og:url" content="https://am318.github.io/symmetry-lifting-lab/">
+<meta property="og:image" content="https://am318.github.io/symmetry-lifting-lab/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,600;1,8..60,400&display=swap">
@@ -56,7 +66,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .stack > .panel:last-child { flex: 1 }
 canvas { display: block; max-width: 100% }
 .fieldwrap { position: relative; width: 100%; max-width: 620px; margin: 0 auto }
-#field { width: 100%; aspect-ratio: 1 / 1; cursor: crosshair; touch-action: none; border: 1px solid var(--line) }
+#field { width: 100%; aspect-ratio: 1 / 1; cursor: crosshair; touch-action: manipulation; border: 1px solid var(--line) }
 #hover-ro { position: absolute; left: 8px; top: 8px; font-family: var(--f-mono); font-size: 11.5px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; pointer-events: none; font-variant-numeric: tabular-nums }
 #net { width: 100%; height: 330px; cursor: pointer }
 #coef { width: 100%; height: 300px; cursor: crosshair }
@@ -66,7 +76,8 @@ label, .lbl { color: var(--muted); font-size: 13px }
 .check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer }
 .check input { accent-color: var(--ink) }
 input[type="range"] { width: 100%; accent-color: var(--ink) }
-select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink) }
+select, input[type="number"] { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink) }
+#sel-idx { width: 6.5em; font-family: var(--f-mono) }
 .btn { font: inherit; font-size: 13.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 12px; cursor: pointer }
 .btn:hover:not(:disabled) { border-color: var(--muted) }
 .btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink) }
@@ -83,11 +94,37 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var
 .ladder .bar { height: 6px; border-radius: 3px; background: var(--soft); position: relative; overflow: hidden }
 .ladder .bar i { position: absolute; inset: 0 auto 0 0; background: var(--b); border-radius: 3px }
 .ladder .sel { color: var(--ink); font-weight: 500 }
+.panel > .seg { justify-self: start }
+#walkbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; gap: 12px; align-items: center; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -2px 10px rgba(0,0,0,0.12);
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)) }
+#walkbar canvas { width: 60px; height: 60px; flex: none; border: 1px solid var(--line); border-radius: 4px; cursor: pointer }
+#walkbar .status { flex: 1; min-width: 0; min-height: 0 }
+body.walking { padding-bottom: 96px }
+@media (min-width: 721px) { #walkbar { display: none !important } body.walking { padding-bottom: 48px } }
+body.demo #walkbar { display: none !important }   /* the demo keeps the field in view, and the bar would cover its captions */
+#trace.pick { cursor: pointer }
+.scrub { flex-wrap: nowrap } .scrub input { flex: 1; min-width: 0 } #scrub-play { padding: 4px 9px; line-height: 0 } .scrub .num { font-size: 12px; color: var(--muted); min-width: 5.5em; text-align: right }
+.walkbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
+.walkbtns .btn { padding-inline: 6px }
+.btn.small { font-size: 12.5px; padding: 3px 9px }
+.footctl { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; margin-top: 8px }
+#demo-cap { position: absolute; left: 10px; right: 10px; bottom: 10px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 8px; font-size: 14.5px; line-height: 1.4;
+  color: var(--ink); background: var(--panel); background: color-mix(in srgb, var(--panel) 93%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,0.15); pointer-events: none }
 .opts { display: grid; grid-template-columns: repeat(2, max-content); gap: 6px 22px; margin-top: 8px }
 @media (max-width: 440px) { .opts { grid-template-columns: max-content } }
 .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--f-mono) }
 .legend canvas { height: 8px; width: 150px; border-radius: 2px }
+.fieldbtns { display: flex; gap: 6px; margin-left: auto }   /* stays right when the legend row wraps */
+#field-stage:fullscreen { background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px }
+#field-stage:fullscreen .fieldwrap, #field-stage:fullscreen > .row { width: min(calc(100vw - 32px), calc(100vh - 84px)); max-width: none; margin: 0 }
+#field-stage:fullscreen #demo-cap { font-size: clamp(15px, 1.6vmin + 6px, 26px); left: 4%; right: 4%; bottom: 3% }
+/* while the demo runs, a tag on the field says it can be taken over (the button that says so is in the footer) */
+#demo-tag { display: none; position: absolute; top: 10px; left: 10px; padding: 3px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px;
+  color: var(--ink); background: var(--panel); background: color-mix(in srgb, var(--panel) 88%, transparent); pointer-events: none }
+body.demo #demo-tag { display: block }
+#field-stage:fullscreen #demo-tag { font-size: clamp(13px, 1.1vmin + 5px, 20px); top: 3%; left: 4% }
 .hint { color: var(--muted); font-size: 12.5px; margin: 0; line-height: 1.4 }
+code { font-family: var(--f-mono); font-size: 0.92em }
 .try { font-size: 13px; margin: 8px 0 0; line-height: 1.45; padding: 6px 10px; border-left: 3px solid var(--line); background: var(--soft); border-radius: 0 6px 6px 0 }
 .try b { font-weight: 600 }
 .name { font-size: 13px }
@@ -97,6 +134,7 @@ select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var
 @keyframes pulse { 50% { opacity: 0.25 } }
 @media (prefers-reduced-motion: reduce) { .status.busy::before { animation: none } }
 svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 10px }
+#trace text, #profile text { paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round }   /* labels stay legible over the lines */
 details.adv { border-top: 1px solid var(--line); padding-top: 8px }
 details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; list-style: none; display: flex; align-items: center; gap: 6px }
 details.adv summary::-webkit-details-marker { display: none }
@@ -115,6 +153,14 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 #summary th.n { font-family: inherit }
 #summary .spark { display: block; color: var(--ink) }
 #summary .eqtag { color: var(--muted); font-size: 11px }
+#summary .sum-on { display: none }
+/* phones: what each network was trained on goes under its name, so loss and defect fit beside it; the rest scrolls */
+@media (max-width: 560px) {
+  #summary th:nth-child(2), #summary td:nth-child(2) { display: none }
+  #summary .sum-on { display: block; color: var(--muted); font-size: 11px }
+  #summary th { white-space: normal; vertical-align: bottom }
+  #summary th, #summary td { padding: 4px 6px }
+}
 #summary tbody tr { cursor: pointer }
 #summary tbody tr:hover { background: var(--soft) }
 #summary tr.cur td:first-child { box-shadow: inset 3px 0 0 var(--hl) }
@@ -132,10 +178,14 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 .math sub, .math sup { font-style: normal }
 @media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) } .center { grid-column: 1 / -1; order: -1 } }
 @media (max-width: 520px) { #summary th, #summary td { padding: 4px 5px } #summary td:first-child, #summary th:first-child { white-space: normal; min-width: 7em } }
-@media (max-width: 720px) { .grid, .grid2 { grid-template-columns: minmax(0, 1fr) } #net { height: 280px } }
+@media (max-width: 720px) { .grid, .grid2 { grid-template-columns: minmax(0, 1fr) } #net { height: 280px } .grid > .stack.left { order: 1 } }
 </style>
 </head>
 <body>
+<script>
+// a theme picked on the public page (inside a host frame the host sets the theme)
+try { const t = window.self === window.top && localStorage.getItem("sll-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 
 <div class="wrap">
   <header>
@@ -156,10 +206,11 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <div class="seg" role="group" aria-label="Training stage" id="stage-seg" title="Checkpoints from the same training run"></div>
     </div>
   </header>
+  <noscript><p class="hint" style="text-align:center">This page needs JavaScript: every network is evaluated live in your browser.</p></noscript>
 
   <div class="grid">
     <!-- left: network and parameters -->
-    <div class="stack">
+    <div class="stack left">
       <section class="panel">
         <div class="row between"><h2>Network</h2>
           <div class="seg small" role="group" aria-label="Edge colour">
@@ -175,7 +226,8 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
 
       <section class="panel" id="groups">
         <h2>Perturb parameters</h2>
-        <div class="name" id="sel-name">Click an edge, a unit or a point in the coefficient plot to pick one parameter.</div>
+        <div class="name" id="sel-name">Click an edge, a unit or a point in the coefficient plot, or type a number, to pick one parameter.</div>
+        <div class="row between"><label for="sel-idx" class="lbl">parameter number</label><input type="number" id="sel-idx" min="0" step="1" inputmode="numeric" placeholder="–" title="Parameter number, counting the weights and then the biases of each layer from the input; the arrow keys step through them"></div>
         <div class="row between" id="sel-row" hidden><span class="lbl">value</span><span class="num" id="sel-val">–</span></div>
         <input type="range" id="sel-slider" min="-1" max="1" step="0.001" value="0" disabled aria-label="Selected parameter value">
         <div class="sep"></div>
@@ -214,12 +266,17 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
           </div>
         </div>
       </div>
+      <div id="field-stage">
       <div class="fieldwrap">
         <canvas id="field" aria-label="Output field of the network over the plane"></canvas>
         <div id="hover-ro" hidden></div>
+        <div id="demo-cap" hidden aria-live="polite"></div>
+        <div id="demo-tag" aria-hidden="true">Click or tap anywhere to try it yourself</div>
       </div>
-      <div class="row">
+      <div class="row between">
         <div class="legend"><span id="lg-name" style="font-family:var(--f-serif);font-style:italic;font-size:13px;color:var(--ink)"></span><span id="lg-lo">–</span><canvas id="lg-bar" width="150" height="8"></canvas><span id="lg-hi">–</span></div>
+        <div class="fieldbtns"><button class="btn small" id="field-fs" hidden title="Show the field and its colour bar on the whole screen, for a projector or a screen at a poster (Esc to leave)">Full screen</button><button class="btn small" id="save-png" title="Download the field as shown, with its colour bar and a caption, as a PNG">Save image</button></div>
+      </div>
       </div>
       <div class="opts">
           <label class="check" for="colour-style" title="How the field is coloured. Paper style: class fills for classifiers, viridis with contours for potentials">colour map <select id="colour-style" aria-label="Colour map">
@@ -257,15 +314,16 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <section class="panel">
         <h2>Walk in parameter space</h2>
         <div class="seg" role="group" aria-label="Direction"><button id="w-c" aria-pressed="false">along c*</button><button id="w-b" aria-pressed="true">along b*</button></div>
-        <div class="row">
-          <button class="btn primary" id="w-go">Walk</button>
-          <button class="btn" id="w-restore" title="Resolved walk along b* with all parameters free, in the normalised gauge (raw for the spiral), with a step-size check, until the equivariance defect is 1% of where it started; the ideal end point is P_ℰ f">Restore symmetry</button>
+        <div class="walkbtns">
+          <button class="btn primary" id="w-go" title="Walk from the current weights in the chosen direction, to the t in the settings">Walk</button>
           <button class="btn" id="w-stop" disabled>Stop</button>
+          <button class="btn" id="w-restore" title="Resolved walk along b* with all parameters free, in the normalised gauge (raw for the spiral), with a step-size check, until the equivariance defect is 1% of where it started; the ideal end point is P_ℰ f">Restore symmetry</button>
+          <button class="btn" id="w-compare" title="From the trained weights, run a Fixed walk and then a Resolved walk in the chosen direction, to the t in the settings, and overlay both in the trace (as in the paper's figures)">Resolved vs Fixed</button>
         </div>
-        <div class="row"><button class="btn" id="w-compare" title="From the trained weights, run a Fixed walk and then a Resolved walk in the chosen direction, and overlay both in the trace (as in the paper's figures)">Resolved vs Fixed</button><span class="hint">from the trained weights, to the t in the settings</span></div>
         <div class="status" id="status"></div>
-        <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true">equivariance defect</button><button id="tr-loss" aria-pressed="false">training loss</button><button id="tr-fit" aria-pressed="false" title="Accuracy (classifiers) or error against the true field (regressions) along the walk: solid over the whole domain, dotted on the training region">fit</button><button id="tr-plane" aria-pressed="false" title="Each walk as a path in the plane of equivariance defect (across) and training loss (up): the start is the hollow circle">loss vs defect</button></div></div>
+        <div class="row between"><span class="lbl">trace</span><div class="seg small" role="group" aria-label="Trace quantity"><button id="tr-defect" aria-pressed="true" title="Equivariance defect ‖δ‖ / ‖f‖ along the walk">defect</button><button id="tr-loss" aria-pressed="false" title="Training loss along the walk">loss</button><button id="tr-fit" aria-pressed="false" title="Accuracy (classifiers) or error against the true field (regressions) along the walk: solid over the whole domain, dotted on the training region">fit</button><button id="tr-plane" aria-pressed="false" title="Each walk as a path in the plane of equivariance defect (across) and training loss (up): the start is the hollow circle">loss vs defect</button></div></div>
         <svg id="trace" viewBox="0 0 300 150" width="100%" role="img" aria-label="Defect against walk time"></svg>
+        <div class="row scrub" id="scrub-box" hidden title="Move back along the last walk (or click the trace): the field, profile and readouts show the weights at that t. A new walk starts from there."><label for="scrub">replay</label><button class="btn small" id="scrub-play" aria-label="Play the walk again" title="Play the walk again from the weights stored at each step (no lifts are solved)"><svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M2 1l7 4-7 4z" fill="currentColor"/></svg></button><input type="range" id="scrub" min="0" max="1" step="1" value="1"><span class="num" id="scrub-val"></span></div>
         <details class="adv">
           <summary>Walk settings</summary>
           <div class="inner">
@@ -275,7 +333,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
             <div class="row between"><label for="wT">run to t =</label><span class="num" id="wT-val">1.0</span></div>
             <input type="range" id="wT" min="0.2" max="8" step="0.1" value="1">
             <div class="row between"><label for="w-dt">Euler step Δt</label>
-              <select id="w-dt"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option></select></div>
+              <select id="w-dt"><option value="0.025">0.025</option><option value="0.05">0.05</option><option value="0.1" selected>0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option></select></div>
             <p class="hint" id="gauge-hint"></p>
             <div><button class="btn" id="w-clear">Clear runs</button></div>
           </div>
@@ -289,7 +347,7 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       <div class="row between"><h2 id="prof-title">Angular deviation profile</h2><span class="num" id="r0-val" style="font-size:12px;color:var(--muted)">r = 0.50</span></div>
       <svg id="profile" viewBox="0 0 460 210" width="100%" role="img" aria-label="Defect against angle at a fixed radius"></svg>
       <input type="range" id="r0" min="0.1" max="1" step="0.01" value="0.5" aria-label="Profile radius">
-      <p class="hint">δ = f − P<sub>ℰ</sub>f around the dotted circle in the field. Solid lines: the walk, coloured from blue (start) to red (latest). Dashed: the ideal flow at the latest t, a rotation for c* and e<sup>−t</sup>δ for b*.</p>
+      <p class="hint">δ = f − P<sub>ℰ</sub>f around the dotted circle in the field. Solid lines: the walk, coloured from blue (start) to red (latest); amber: the step being replayed. Hover for the value at an angle. Dashed: the ideal flow at the latest t, a rotation for c* and e<sup>−t</sup>δ for b*.</p>
     </section>
     <section class="panel">
       <div class="row between"><h2>Lift coefficients by parameter</h2><span class="hint" id="coef-gauge"></span></div>
@@ -316,8 +374,10 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
     <section class="panel">
       <h3>The two directions</h3>
       <p><span class="math">c* = J<sup>+</sup>η</span> and <span class="math">b* = J<sup>+</sup>(−δ)</span>. <span class="math">J</span> is the Jacobian of the outputs on a polar probe with respect to the parameters. <span class="math">J<sup>+</sup></span> is truncated at <span class="math">σ<sub>k</sub> ≥ 10<sup>−3</sup>σ<sub>1</sub></span>, and the minimum norm is taken in the sensitivity-normalised gauge (or plain ℓ2, by the switch). The lift residual is the part of the target the parameters cannot reach locally.</p>
-      <p><b>Resolved</b> walks recompute <span class="math">J</span> and the direction at every Euler step; <b>Fixed</b> walks reuse the one from <span class="math">t = 0</span>. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
+      <p><b>Resolved</b> walks recompute <span class="math">J</span> and the direction at every Euler step; <b>Fixed</b> walks reuse the one from <span class="math">t = 0</span>. Along <span class="math">c*</span>, <span class="math">t = 1</span> is a rotation by 1 rad. Euler steps follow the flow only to first order in <span class="math">Δt</span>, so a smaller step tracks it more closely. Along <span class="math">b*</span>, the ideal flow shrinks <span class="math">δ</span> like <span class="math">e<sup>−t</sup></span>. With <b>only the group</b> free, the lift is solved from the group's columns of <span class="math">J</span> alone, so its residual says how much of the direction that group can realise.</p>
       <p>The <b>training stage</b> switch loads checkpoints of the same run, at initialisation and after 2% and 10% of training, so you can compare how well the lifts work before and after training. The <b>training loss</b> readout is each network's objective on a sample from its training distribution; it shows what a walk costs the fit. The <b>trace</b> under the walk plots the defect, the training loss, the fit (accuracy or error, over the whole domain and where trained), or the walk as a path in the loss–defect plane.</p>
+      <p>After a walk, the <b>replay</b> slider, or a click on the trace, moves back along it, and the play button runs it again from the stored weights without solving any lifts; a new walk starts from the step shown.</p>
+      <p>For a screen next to a poster, <b>Play demo</b> (at the foot of the page) loops through a few captioned scenes until the page is touched, keeping the screen awake while it runs, and <b>Full screen</b> shows the field on its own.<span id="kiosk-note" hidden> Opened with <code>?demo</code> at the end of its address, the page starts the demo by itself and goes back to it after two minutes without input.</span></p>
     </section>
     <section class="panel systems">
       <h3>Systems</h3>
@@ -331,8 +391,11 @@ details.adv .inner { display: grid; gap: 8px; padding-top: 8px }
       </div>
     </section>
   </div>
-  <footer class="foot">Method from <a href="https://arxiv.org/abs/2608.24700" target="_blank" rel="noopener"><i>Parameter-Level Attribution of Symmetry in Trained Networks</i></a> (NeurReps 2026, arXiv:2608.24700). Everything is computed live in your browser, in float64.</footer>
+  <footer class="foot">Method from <a href="https://arxiv.org/abs/2608.24700" target="_blank" rel="noopener"><i>Parameter-Level Attribution of Symmetry in Trained Networks</i></a> (NeurReps 2026, arXiv:2608.24700). Everything is computed live in your browser, in float64.
+    <div class="footctl"><button class="btn small" id="demo-btn" title="Cycle through a few scenes with captions, for a screen at a poster; touch the page or press a key to stop">Play demo</button><div class="seg small" role="group" aria-label="Colour theme" id="theme-box" hidden><button id="th-auto" aria-pressed="true" title="Follow the system setting">auto</button><button id="th-light" aria-pressed="false">light</button><button id="th-dark" aria-pressed="false">dark</button></div></div></footer>
 </div>
+<!-- phones: while a walk runs, a bar with a live thumbnail of the field (tap it to scroll there), the status and Stop -->
+<div id="walkbar" hidden><canvas id="wb-field" width="128" height="128" title="Show the field" aria-label="Thumbnail of the field during the walk; tap to scroll to the field"></canvas><div class="status" id="wb-status"></div><button class="btn" id="wb-stop">Stop</button></div>
 
 <script src="core.js"></script>
 <script>
@@ -415,20 +478,22 @@ const fmt = (v) => { if (!isFinite(v)) return "–"; const a = Math.abs(v); retu
 // ------------------------------------------------------------------ system set-up
 const STAGES = [["init", "init"], ["early", "2%"], ["mid", "10%"], ["trained", "trained"]];
 const wkey = () => { const k = S.key + (S.stage === "trained" ? "" : "@" + S.stage); return S.weights[k] ? k : S.key; };
-// URL hash: "#<system>" plus optional "&stage=<init|early|mid>" and "&g=<n>" (0 = SO(2)), so a link opens the same view
+// URL hash: "#<system>" plus optional "&stage=<init|early|mid>" "&g=<n>" (0 = SO(2)) and "&v=<pe|delta>", so a link opens the same view
 function parseHash() {
   const [h, ...kv] = location.hash.replace(/^#/, "").split("&"), key = Object.keys(SYS).find((q) => SYS[q].hash === h), o = {};
   for (const p of kv) { const [a, b] = p.split("="); o[a] = b; }
   const cfg = key && SYS[key], stage = STAGES.some(([st]) => st === o.stage) ? o.stage : "trained", g = o.g !== undefined ? +o.g : NaN;
-  return key ? { key, stage, group: cfg.groups.includes(g) ? g : undefined } : null;
+  return key ? { key, stage, group: cfg.groups.includes(g) ? g : undefined, view: ["pe", "delta"].includes(o.v) ? o.v : "f" } : null;
 }
+function setView(v) { S.view = v; for (const u of ["f", "pe", "delta"]) $("v-" + u).setAttribute("aria-pressed", u === v); markDirty(); }
 function writeHash() {
   const cfg = SYS[S.key], def = cfg.group ?? cfg.groups[0];
-  const h = "#" + cfg.hash + (S.stage !== "trained" ? "&stage=" + S.stage : "") + (S.group !== def ? "&g=" + S.group : "");
+  const h = "#" + cfg.hash + (S.stage !== "trained" ? "&stage=" + S.stage : "") + (S.group !== def ? "&g=" + S.group : "") + (S.view !== "f" ? "&v=" + S.view : "");
   if (location.hash !== h) { try { history.replaceState(null, "", h); } catch (e) { location.hash = h; } }
 }
 function applyHash() {
   const q = parseHash(); if (!q || S.walking) return false;
+  if (q.view !== S.view) setView(q.view);
   if (q.key === S.key && q.stage === S.stage && (q.group === undefined || q.group === S.group)) return true;
   S.key = null; S.stage = q.stage; setSystem(q.key, true, true);
   if (q.group !== undefined && q.group !== S.group) setGroup(q.group);
@@ -439,6 +504,7 @@ function setSystem(key, fromHash, keepStage) {
   const sameKey = key === S.key;
   if (!sameKey && !keepStage) S.stage = "trained";
   S.key = key; const cfg = SYS[key];
+  status("");   // a message about the previous network
   S.net = C.makeNet(S.weights[wkey()]);
   const sts = STAGES.filter(([st]) => st === "trained" || S.weights[key + "@" + st]), sg = $("stage-seg");
   sg.innerHTML = ""; sg.hidden = sts.length < 2;
@@ -458,11 +524,11 @@ function setSystem(key, fromHash, keepStage) {
   const isV = cfg.out === "V";
   $("v-f").textContent = cfg.out; $("v-pe").innerHTML = `P<sub>ℰ</sub> ${cfg.out}`; $("v-delta").innerHTML = `δ = ${cfg.out} − P<sub>ℰ</sub> ${cfg.out}`;
   $("field-hint").textContent = {
-    annulus: "Fill: predicted class. Black line: decision boundary f = 0 (dashed: where it was before the weights moved); thin lines: contours of f, blue below zero and red above. " + (cfg.wedge < 360 ? "Points: training data, all inside the 90° wedge. " : "Points: training data. ") + "Dotted circle: the profile radius.",
-    mexican: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc. Dotted circle: the profile radius.",
-    spiral: "Fill: predicted class; black line: f = 0 (dashed: before the weights moved); thin lines: contours of f. " + (cfg.wedge < 360 ? "Points: training data, all inside the 120° wedge (one period of the pattern). " : "Points: training data. ") + "The labels repeat every 120° and swap every 60°, so the task has C₃ symmetry but not C₆ or SO(2). Dotted circle: the profile radius.",
-    twobody: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Orange dots: the observed positions the network was trained on" + (key !== "twobody_orbits" ? ", three half orbits that all start on the +x axis. " : ", 24 orbits spread round the circle. ") + "The true potential is rotation-invariant. Dotted circle: the profile radius.",
-    sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Dotted circle: the profile radius.",
+    annulus: "Fill: predicted class. Black line: decision boundary f = 0 (dashed: where it was before the weights moved); thin lines: contours of f, blue below zero and red above. " + (cfg.wedge < 360 ? "Points: training data, all inside the 90° wedge. " : "Points: training data. ") + "Dotted circle: the profile radius (click the field to move it).",
+    mexican: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Dashed circle: the probe disc. Dotted circle: the profile radius (click the field to move it).",
+    spiral: "Fill: predicted class; black line: f = 0 (dashed: before the weights moved); thin lines: contours of f. " + (cfg.wedge < 360 ? "Points: training data, all inside the 120° wedge (one period of the pattern). " : "Points: training data. ") + "The labels repeat every 120° and swap every 60°, so the task has C₃ symmetry but not C₆ or SO(2). Dotted circle: the profile radius (click the field to move it).",
+    twobody: "Colour: V − min V on the probe disc, with white contours. Arrows: learned force, or its non-symmetric part in the δ view. Orange dots: the observed positions the network was trained on" + (key !== "twobody_orbits" ? ", three half orbits that all start on the +x axis. " : ", 24 orbits spread round the circle. ") + "The true potential is rotation-invariant. Dotted circle: the profile radius (click the field to move it).",
+    sixfold: "Colour: V − min V on the probe disc, with white contours. " + (cfg.wedge < 360 ? "Grey lines: the 120° wedge the network was trained on. " : "") + "Dashed circle: the probe disc. Dotted circle: the profile radius (click the field to move it).",
   }[cfg.fam];
   if (cfg.eq) $("field-hint").textContent += ` Equivariant by construction: this network only sees ${cfg.eq}, so it is invariant under ${gName(cfg.group ?? cfg.groups[0])} whatever its weights.`;
   $("try-hint").innerHTML = TRY[key] ? "<b>Try:</b> " + TRY[key] : ""; $("try-hint").hidden = !TRY[key];
@@ -540,12 +606,23 @@ function averager(th) {
   for (let k = 0; k < n; k++) { cs.push(Math.cos((2 * Math.PI * k) / n)); sn.push(Math.sin((2 * Math.PI * k) / n)); }
   const t = new Float64Array(2);
   return {
-    grid: () => {
-      const M = G * G, xy = new Float64Array(2 * M * n), v = new Float64Array(M * n), pe = new Float64Array(M);
-      for (let k = 0; k < n; k++) for (let q = 0; q < M; q++) { const x = GXY[2 * q], y = GXY[2 * q + 1], o = 2 * (k * M + q); xy[o] = cs[k] * x - sn[k] * y; xy[o + 1] = sn[k] * x + cs[k] * y; }
-      S.sys.values(th, xy, M * n, v);
-      for (let k = 0; k < n; k++) for (let q = 0; q < M; q++) pe[q] += v[k * M + q];
-      for (let q = 0; q < M; q++) pe[q] /= n;
+    // P_E f on the display grid. f0 = f on the grid (k = 0). The grid is symmetric under x -> -x, which maps
+    // point q to M - 1 - q, so for even n the rotations by 2 pi k / n + pi come free: f(R_k (-x)) is the
+    // value for rotation k at the mirrored point. Only k = 1 .. n/2 - 1 (odd n: 1 .. n - 1) need the network.
+    grid: (f0) => {
+      const M = G * G, even = n % 2 === 0, half = even ? n / 2 : n, pe = new Float64Array(M);
+      const v = new Float64Array(M * half);
+      v.set(f0 || S.sys.values(th, GXY, M, new Float64Array(M)));
+      if (half > 1) {
+        const xy = new Float64Array(2 * M * (half - 1));
+        for (let k = 1; k < half; k++) for (let q = 0; q < M; q++) { const x = GXY[2 * q], y = GXY[2 * q + 1], o = 2 * ((k - 1) * M + q); xy[o] = cs[k] * x - sn[k] * y; xy[o + 1] = sn[k] * x + cs[k] * y; }
+        S.sys.values(th, xy, M * (half - 1), v.subarray(M));
+      }
+      for (let q = 0; q < M; q++) {
+        let s = 0;
+        for (let k = 0; k < half; k++) s += v[k * M + q] + (even ? v[k * M + M - 1 - q] : 0);
+        pe[q] = s / n;
+      }
       return pe;
     },
     pg: (x, y) => { let s = 0; for (let k = 0; k < n; k++) s += S.sys.value(th, cs[k] * x - sn[k] * y, sn[k] * x + cs[k] * y); return s / n; },
@@ -556,7 +633,7 @@ const GXY = new Float64Array(2 * G * G);
 for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const n = j * G + i; GXY[2 * n] = -E + (2 * E * (i + 0.5)) / G; GXY[2 * n + 1] = E - (2 * E * (j + 0.5)) / G; }
 function displayData(th) {
   const isF = SYS[S.key].kind === "force", av = averager(th);
-  const val = S.sys.values(th, GXY, G * G, new Float64Array(G * G)), pe = av.grid();
+  const val = S.sys.values(th, GXY, G * G, new Float64Array(G * G)), pe = av.grid(val);
   let fMax = 0, dMax = 0, vMin = Infinity, vMax = -Infinity;
   for (let n = 0; n < G * G; n++) {
     const x = GXY[2 * n], y = GXY[2 * n + 1], r = Math.hypot(x, y), v = val[n], m = pe[n];
@@ -688,6 +765,11 @@ function drawField(d) {
   }
   S.lastDisplay = d;
 }
+// a text alternative for the field canvas that follows the view (after the readouts are updated)
+function labelField() {
+  const cfg = SYS[S.key];
+  fieldCv.setAttribute("aria-label", `${cfg.title}: ${FAM_NAME[cfg.fam]}, ${cfg.trained || cfg.label || "trained"}, showing ${{ f: cfg.out, pe: "its symmetrised part", delta: "the defect δ" }[S.view]}; equivariance defect ${$("ro-defect").textContent} for ${gName(S.group)}`);
+}
 // marching squares: adds the level set {F = lev} to the current path
 function contourPath(ctx, F, w, lev) {
   const cell = w / G, at = (i, j) => F[j * G + i] - lev;
@@ -701,10 +783,53 @@ function contourPath(ctx, F, w, lev) {
   }
 }
 function drawLegend(lo, hi, kind, name) {
+  S.legend = { lo, hi, kind, name };
   $("lg-name").textContent = name || "";
   const cv = $("lg-bar"), ctx = cv.getContext("2d");
   for (let i = 0; i < cv.width; i++) { const u = i / (cv.width - 1); ctx.fillStyle = rgb(kind === "vi" ? viridis(u) : coolwarm(u)); ctx.fillRect(i, 0, 1, cv.height); }
   $("lg-lo").textContent = fmt(lo); $("lg-hi").textContent = fmt(hi);
+}
+
+// the field as shown, with its colour bar and a caption, as a PNG download
+let DL = null;   // the viewer's downloads capability, when the page is framed by claude.ai
+function saveFieldPNG() {
+  const cfg = SYS[S.key], src = fieldCv, sc = src.width / src.clientWidth, pad = Math.round(14 * sc), w = src.width;
+  const cap = Math.round(64 * sc), out = document.createElement("canvas");
+  out.width = w + 2 * pad; out.height = w + 2 * pad + cap;
+  const ctx = out.getContext("2d");
+  ctx.fillStyle = PAL.panel; ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, pad, pad);
+  ctx.strokeStyle = PAL.line; ctx.lineWidth = sc; ctx.strokeRect(pad - sc / 2, pad - sc / 2, w + sc, w + sc);
+  const L = S.legend || { lo: 0, hi: 1, kind: "cw", name: "" }, y0 = pad + w + Math.round(14 * sc), bw = Math.round(180 * sc), bh = Math.round(9 * sc);
+  ctx.textBaseline = "middle"; ctx.fillStyle = PAL.ink;
+  ctx.font = `italic ${Math.round(13 * sc)}px ${cssVar("--f-serif")}`;
+  let x = pad; ctx.fillText(L.name, x, y0 + bh / 2); x += ctx.measureText(L.name).width + 10 * sc;
+  ctx.font = `${Math.round(11.5 * sc)}px ${cssVar("--f-mono")}`; ctx.fillStyle = PAL.muted;
+  ctx.fillText(fmt(L.lo), x, y0 + bh / 2); x += ctx.measureText(fmt(L.lo)).width + 8 * sc;
+  for (let i = 0; i < bw; i++) { const u = i / (bw - 1); ctx.fillStyle = rgb(L.kind === "vi" ? viridis(u) : coolwarm(u)); ctx.fillRect(x + i, y0, 1, bh); }
+  x += bw + 8 * sc; ctx.fillStyle = PAL.muted; ctx.fillText(fmt(L.hi), x, y0 + bh / 2);
+  const stage = STAGES.find((s) => s[0] === S.stage)[1], view = { f: "f", pe: "P_ℰ f", delta: "δ = f − P_ℰ f" }[S.view];
+  let moved = false; for (let i = 0; i < S.theta.length && !moved; i++) moved = S.theta[i] !== S.theta0[i];
+  const parts = [FAM_NAME[cfg.fam] + (cfg.eq ? " (equivariant net)" : ""), cfg.trained || cfg.label, stage, view, "G = " + gName(S.group), "defect " + $("ro-defect").textContent];
+  if (moved) parts.push("weights moved");
+  ctx.font = `${Math.round(12 * sc)}px ${cssVar("--f-body")}`; ctx.fillStyle = PAL.ink;
+  ctx.fillText(parts.filter(Boolean).join("  ·  "), pad, y0 + bh + Math.round(22 * sc));
+  const name = [cfg.hash, S.stage !== "trained" ? S.stage : "", S.view, (S.group ? "C" + S.group : "SO2"), moved ? "moved" : ""].filter(Boolean).join("_") + ".png";
+  if (DL) {
+    let bytes;
+    try { const bin = atob(out.toDataURL("image/png").split(",")[1]); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); } catch (e) { return; }
+    DL.save({ filename: name, data: bytes }).catch((e) => {
+      const code = e && e.code;
+      if (code === "declined") return;
+      status(code === "rate_limited" ? "Another save is waiting for an answer; try again in a moment." : code === "host_unavailable" ? "This app cannot save files: open the page in a browser to save the image." : "The image could not be saved here.");
+    });
+    return;
+  }
+  out.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, "image/png");
 }
 
 // ------------------------------------------------------------------ angular profile
@@ -717,13 +842,14 @@ function drawProfile(cur) {
   const svg = $("profile"), W = 460, H = 210, l = 46, r = 8, t = 8, bt = 22;
   if (!S.profBase || S.profBase.r0 !== S.r0 || S.profBase.alpha !== S.alpha || S.profBase.group !== S.group) {
     const p0 = profileAt(S.theta0, averager(S.theta0));
-    S.profBase = { r0: S.r0, alpha: S.alpha, group: S.group, amp: Math.max(1e-12, ...p0.map(Math.abs)) };
+    S.profBase = { r0: S.r0, alpha: S.alpha, group: S.group, amp: Math.max(1e-12, ...p0.map(Math.abs).filter(isFinite)) };
   }
   let amp = S.profBase.amp;
-  for (const c of S.hist.map((h) => h.prof).concat([cur])) for (const v of c) amp = Math.max(amp, Math.abs(v));
+  for (const c of S.hist.map((h) => h.prof).concat([cur])) for (const v of c) if (isFinite(v)) amp = Math.max(amp, Math.abs(v));
   amp *= 1.1;
   const X = (k, n) => l + ((W - l - r) * k) / n, Y = (v) => t + ((H - t - bt) * (1 - v / amp)) / 2;
-  const path = (p) => p.reduce((s, v, k) => s + (k ? "L" : "M") + X(k, p.length - 1).toFixed(1) + "," + Y(v).toFixed(1), "");
+  // a gap where the outputs are not finite (weights that overflowed)
+  const path = (p) => p.reduce((s, v, k) => (isFinite(v) ? s + (k && isFinite(p[k - 1]) ? "L" : "M") + X(k, p.length - 1).toFixed(1) + "," + Y(v).toFixed(1) : s), "");
   let s = `<line x1="${l}" x2="${W - r}" y1="${Y(0)}" y2="${Y(0)}" stroke="${PAL.line}"/>`;
   [0, 90, 180, 270, 360].forEach((deg) => { const x = X(deg, 360); s += `<line x1="${x}" x2="${x}" y1="${t}" y2="${H - bt}" stroke="${PAL.line}" stroke-dasharray="2 3"/><text x="${x}" y="${H - 6}" text-anchor="middle">${deg}°</text>`; });
   s += `<text x="${l - 4}" y="${Y(amp / 1.1) + 3}" text-anchor="end">${fmt(amp / 1.1)}</text><text x="${l - 4}" y="${Y(-amp / 1.1) + 3}" text-anchor="end">${fmt(-amp / 1.1)}</text>`;
@@ -738,6 +864,16 @@ function drawProfile(cur) {
     const ideal = S.hist.which === "b" ? p0.map((v) => v * Math.exp(-last.t))
       : p0.map((_, k) => { let u = (k / n - last.t / (2 * Math.PI)) * n; u = ((u % n) + n) % n; const i = Math.floor(u), w = u - i; return p0[i] * (1 - w) + p0[Math.min(n, i + 1)] * w; });
     s += `<path d="${path(ideal)}" fill="none" stroke="${PAL.ink}" stroke-width="1.3" stroke-dasharray="5 4"/>`;
+    // replaying an earlier step: draw the profile at that step on top
+    if (!S.walking && S.scrubFor === S.hist && S.scrubK < S.hist.length - 1) s += `<path d="${path(cur)}" fill="none" stroke="${PAL.hl}" stroke-width="2.2"/>`;
+  }
+  // hover: delta of the weights shown, at the angle under the pointer
+  S.profGeom = { l, r, W }; S.profCur = cur;
+  const pk = S.profHoverK;
+  if (pk != null && pk < cur.length && isFinite(cur[pk])) {
+    const n = cur.length - 1, xs = X(pk, n), right = xs < (l + W - r) / 2;
+    s += `<line x1="${xs.toFixed(1)}" x2="${xs.toFixed(1)}" y1="${t}" y2="${H - bt}" stroke="${PAL.muted}" stroke-dasharray="2 2"/><circle cx="${xs.toFixed(1)}" cy="${Y(cur[pk]).toFixed(1)}" r="2.8" fill="${PAL.ink}"/>`;
+    s += `<text x="${(xs + (right ? 6 : -6)).toFixed(1)}" y="${t + 12}" text-anchor="${right ? "start" : "end"}">φ = ${Math.round((360 * pk) / n)}° · δ = ${fmt(cur[pk])}</text>`;
   }
   svg.innerHTML = s;
 }
@@ -750,7 +886,7 @@ function drawTrace() {
   if (S.traceKind === "plane") return drawPlane(svg, runs);
   const isAcc = SYS[S.key].score === "acc", fit = S.traceKind === "fit";
   const qi = S.traceKind === "loss" ? 2 : fit ? 3 : 1, qName = qi === 2 ? "training loss" : fit ? (isAcc ? "accuracy, %" : "error vs true, %") : "defect";
-  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Run a walk to trace the ${fit ? (isAcc ? "accuracy" : "error") : qName} against t</text>`; return; }
+  if (!runs.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Press Walk to trace the ${fit ? (isAcc ? "accuracy" : "error") : qName} along it</text>`; return; }
   const sc = fit ? 100 : 1;
   runs.forEach((rn) => {
     rn.q = rn.pts.map((p) => [p[0], (p[qi] ?? NaN) * sc]).filter((p) => isFinite(p[1]));
@@ -773,6 +909,17 @@ function drawTrace() {
     s += `<text x="${l + 6}" y="${t + 10 + 12 * i}" style="fill:${col}">${rn.label}</text>`;
   });
   s += `<text x="${W - r}" y="${t + 8}" text-anchor="end">${qName}${logy ? " (log)" : ""}</text>`;
+  if (!S.walking && S.scrubFor === S.hist && S.scrubK < S.hist.length - 1) { const xs = X(S.hist[S.scrubK].t).toFixed(1); s += `<line x1="${xs}" x2="${xs}" y1="${t}" y2="${H - bt}" stroke="${PAL.hl}" stroke-width="1.2"/>`; }
+  // hover: the value of the last walk at the nearest step (a click replays to it)
+  S.traceGeom = { l, r, W, tMax };
+  const hk = S.traceHoverK, hh = hk != null && !S.walking && S.hist.length > 1 ? S.hist[hk] : null;
+  if (hh) {
+    const p = [hh.t, hh.defect, hh.loss, ...hh.fit], v = (p[qi] ?? NaN) * sc, xs = X(hh.t).toFixed(1);
+    s += `<line x1="${xs}" x2="${xs}" y1="${t}" y2="${H - bt}" stroke="${PAL.muted}" stroke-dasharray="2 2"/>`;
+    if (isFinite(v)) s += `<circle cx="${xs}" cy="${Y(v).toFixed(1)}" r="2.6" fill="${S.hist.which === "c" ? PAL.c : PAL.b}"/>`;
+    const right = +xs < (l + W - r) / 2;
+    s += `<text x="${(+xs + (right ? 5 : -5)).toFixed(1)}" y="${H - bt - 6}" text-anchor="${right ? "start" : "end"}">t = ${hh.t.toFixed(2)} · ${fmt(v)}${fit ? "%" : ""}</text>`;
+  }
   if (fit && runs.some((rn) => rn.q2.length)) s += `<text x="${W - r}" y="${t + 20}" text-anchor="end">solid: everywhere · dotted: where trained</text>`;
   svg.innerHTML = s;
 }
@@ -840,7 +987,7 @@ function updateGroupInfo() {
 async function requestGroupAttrib() {
   const mask = groupMask(); if (!mask) return;
   const key = groupKey(), res = await lift(S.theta, mask);
-  if (key === groupKey()) { S.grpAttrib = res; S.grpFor = key; updateGroupInfo(); }
+  if (res && key === groupKey()) { S.grpAttrib = res; S.grpFor = key; updateGroupInfo(); }
 }
 
 // ------------------------------------------------------------------ network diagram
@@ -1117,6 +1264,8 @@ function updateReadouts() {
 
 // ------------------------------------------------------------------ render loop
 let dirty = false, netDirty = false, scheduled = false;
+const NARROW = window.matchMedia("(max-width: 720px)");   // the walk bar is shown only at this width (see the CSS)
+const scrollMode = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 function markDirty(net) {
   dirty = true; if (net) netDirty = true;
   if (scheduled) return; scheduled = true;
@@ -1130,9 +1279,53 @@ function frame() {
   const d = displayData(S.theta);
   drawField(d);
   drawProfile(profileAt(S.theta, d.av));
-  updateReadouts();
-  drawTrace();
+  updateReadouts(); labelField();
+  drawTrace(); updateScrub();
+  if (!$("walkbar").hidden && NARROW.matches && !DEMO) { const c = $("wb-field").getContext("2d"); c.imageSmoothingQuality = "high"; c.drawImage(fieldCv, 0, 0, 128, 128); }
   if (netDirty) { drawNet(); drawCoef(); netDirty = false; }
+}
+
+// replay: move back along the last walk using the weights stored at each step
+function updateScrub() {
+  const h = S.hist, ok = !S.walking && h.length > 1 && h[0].th, box = $("scrub-box");
+  box.hidden = !ok; if (!ok) return;
+  const sl = $("scrub"), n = h.length - 1;
+  if (S.scrubK === undefined || S.scrubK > n || S.scrubFor !== h) { S.scrubK = n; S.scrubFor = h; }
+  if (+sl.max !== n) sl.max = n;
+  if (+sl.value !== S.scrubK) sl.value = S.scrubK;
+  $("scrub-val").textContent = `t = ${h[S.scrubK].t.toFixed(2)}`;
+}
+function scrubTo(k) {
+  const h = S.hist; if (S.walking || !h[k] || !h[k].th) return;
+  S.scrubK = k; S.scrubFor = h; S.theta.set(h[k].th); S.version++;
+  markDirty(true); requestAttribSoon();
+}
+// play the walk back step by step (2.5 to 8 s for a whole walk), from the start or from where the slider is
+const PLAY_ICON = '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M2 1l7 4-7 4z" fill="currentColor"/></svg>',
+  PAUSE_ICON = '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M2 1h2.2v8H2zM5.8 1H8v8H5.8z" fill="currentColor"/></svg>';
+function setPlayBtn(on) { const b = $("scrub-play"); b.innerHTML = on ? PAUSE_ICON : PLAY_ICON; b.setAttribute("aria-label", on ? "Pause the replay" : "Play the walk again"); }
+// Between two stored steps the walk is a straight Euler step, so frames in between interpolate the weights.
+function stopReplay() {
+  const r = S.replay; if (!r) return;
+  S.replay = null; setPlayBtn(false);
+  if (r.kf != null && S.hist === r.h && !S.walking) scrubTo(Math.round(r.kf));   // pausing lands on a stored step
+}
+function playReplay() {
+  if (S.replay) return stopReplay();
+  const h = S.hist, n = h.length - 1; if (S.walking || n < 1 || !h[0].th) return;
+  const k0 = S.scrubFor === h && S.scrubK < n ? S.scrubK : 0, dur = (Math.min(8000, Math.max(2500, 40 * n)) * (n - k0)) / n;
+  const me = S.replay = { h, kf: null }, t0 = performance.now();
+  setPlayBtn(true); scrubTo(k0);
+  const tick = () => {
+    if (S.replay !== me) return;
+    if (S.hist !== h || S.walking) { me.kf = null; return stopReplay(); }
+    const kf = Math.min(n, k0 + ((performance.now() - t0) / dur) * (n - k0)), k = Math.floor(kf), w = kf - k;
+    if (kf >= n) { me.kf = null; scrubTo(n); return stopReplay(); }
+    me.kf = kf; scrubTo(k);
+    if (w > 0) { const a = h[k].th, b = h[k + 1].th; for (let i = 0; i < a.length; i++) S.theta[i] = a[i] + w * (b[i] - a[i]); }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 // ------------------------------------------------------------------ lifts via the worker
@@ -1145,13 +1338,31 @@ function lift(theta, mask) {
     worker.postMessage(msg, tr);
   });
 }
-function status(msg, busy) { const el = $("status"); el.innerHTML = msg || ""; el.classList.toggle("busy", !!busy); }
+// the lift worker; a lift that fails resolves null, and Stop restarts the worker so a long lift does not hold the walk
+function startWorker() {
+  worker = new Worker("worker.js");
+  worker.onmessage = (ev) => {
+    const r = pending.get(ev.data.id); if (!r) return;
+    pending.delete(ev.data.id);
+    if (ev.data.error) { console.warn("lift failed:", ev.data.error); status("The lift failed at these weights (the outputs may have overflowed). Reset to start again."); r(null); }
+    else r(ev.data);
+  };
+  worker.onerror = (e) => { e.preventDefault?.(); console.warn("lift worker error:", e.message); status("The lift worker stopped unexpectedly; restarting it."); restartWorker(); };
+  worker.postMessage({ cmd: "init", weights: S.weights });
+}
+function restartWorker() {
+  worker.terminate();
+  const rs = [...pending.values()]; pending.clear(); rs.forEach((r) => r(null));
+  startWorker();
+}
+function status(msg, busy) { for (const id of ["status", "wb-status"]) { const el = $(id); el.innerHTML = msg || ""; el.classList.toggle("busy", !!busy); } }
 let attribBusy = false, attribTimer = 0;
 async function requestAttrib() {
   if (attribBusy || !worker || S.walking) return;
   attribBusy = true; const v = S.version, key = wkey(), grp = S.group, gauge = S.gauge;
   const res = await lift(S.theta);
   attribBusy = false;
+  if (!res) return;
   if (key !== wkey() || grp !== S.group || gauge !== S.gauge) return requestAttrib();
   S.attrib = res; S.attribFor = v;
   updateGroupInfo(); markDirty(true);
@@ -1173,11 +1384,13 @@ function setGauge(g, silent) {
 function lockControls(on) {
   for (const id of ["w-go", "w-restore", "w-compare", "grp-kick", "grp-zero", "reset", "w-clear"]) $(id).disabled = on;
   $("w-stop").disabled = !on;
+  $("walkbar").hidden = !on; document.body.classList.toggle("walking", on);
   document.querySelectorAll(".pickers button, #group-seg button, #g-norm, #g-raw, #free-all, #free-grp").forEach((b) => (b.disabled = on));
   $("alpha").disabled = on; $("sel-slider").disabled = on || S.sel < 0;
 }
 async function walk(opts = {}) {
   if (S.walking) return;
+  stopReplay();
   const which = opts.which || S.which, mode = opts.mode || S.mode, free = opts.free || S.free, dt = opts.dt || S.dt, T = opts.T || S.T;
   if (S.hist.length > 1) { S.runs.push({ label: runLabel(S.hist), pts: S.hist.map((h) => [h.t, h.defect, h.loss, ...h.fit]), which: S.hist.which, mode: S.hist.mode }); if (S.runs.length > 4) S.runs.shift(); }
   if (stateFor(S.theta, S.group, false).defect < 1e-9) { status("This network is invariant under G by construction: δ = 0 and η = 0, so there is nothing to lift." + (SYS[S.key].groups.length > 1 ? " Choose a larger group to see a non-zero defect." : ""), false); return; }
@@ -1186,10 +1399,11 @@ async function walk(opts = {}) {
   if (free === "group") {
     if (!S.attrib && $("grp-rule").value.startsWith("top")) { status("Solving the full lift to rank the parameters…", true); S.attrib = await lift(S.theta); S.attribFor = S.version; }
     mask = groupMask();
+    if (!mask) { S.walking = false; lockControls(false); if (S.stop) status("Stopped."); return; }
   }
   const nSteps = Math.max(1, Math.round(T / dt));
   const d0 = updateReadouts();
-  S.hist = [{ t: 0, defect: d0, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)) }];
+  S.hist = [{ t: 0, defect: d0, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)), th: S.theta.slice() }];
   Object.assign(S.hist, { which, mode, free });
   let v0 = null, plateau = false;
   const pgStart = opts.adaptive && which === "b" ? averager(S.theta.slice()) : null;
@@ -1201,6 +1415,7 @@ async function walk(opts = {}) {
       k++;
       status(`Re-solving the lift, step ${k}, t = ${t.toFixed(2)}…`, true);
       const res = await lift(S.theta, mask);
+      if (!res) break;
       if (!mask) { S.attrib = res; S.attribFor = S.version; }
       const dir = which === "c" ? res.c : res.b;
       const nd = Math.hypot(...dir);
@@ -1214,7 +1429,7 @@ async function walk(opts = {}) {
       if (!ok) { S.theta.set(base); break; }
       t += hk; h = Math.min(dt, hk * 1.5);
       S.version++;
-      S.hist.push({ t, defect: dNow, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
+      S.hist.push({ t, defect: dNow, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)), th: S.theta.slice() });
       markDirty(true);
       if (opts.until && dNow <= opts.until * d0) break;
       // Plateau: less than a 10% drop over the last two units of t.
@@ -1228,6 +1443,7 @@ async function walk(opts = {}) {
     if (k === 1 || mode === "resolved") {
       status(`${k === 1 ? "Solving" : "Re-solving"} the lift${mask ? " with only the group free" : ""}, step ${k} of ${nSteps}…`, true);
       const res = await lift(S.theta, mask);
+      if (!res) break;
       if (!mask) { S.attrib = res; S.attribFor = S.version; }
       dir = which === "c" ? res.c : res.b; if (k === 1) v0 = dir;
     } else dir = v0;
@@ -1235,12 +1451,12 @@ async function walk(opts = {}) {
     for (let i = 0; i < S.theta.length; i++) S.theta[i] += dt * dir[i];
     S.version++;
     const dNow = stateFor(S.theta, S.group, false).defect;
-    S.hist.push({ t: k * dt, defect: dNow, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)) });
+    S.hist.push({ t: k * dt, defect: dNow, loss: lossOf(S.theta), fit: scoresNum(S.theta), prof: profileAt(S.theta, averager(S.theta)), th: S.theta.slice() });
     markDirty(true);
     if (opts.until && dNow <= opts.until * d0) break;
     await new Promise((r) => setTimeout(r, mode === "fixed" ? 40 : 0));
   }
-  S.walking = false; lockControls(false);
+  S.walking = false; lockControls(false); updateScrub(); markDirty();
   const last = S.hist[S.hist.length - 1];
   let tail = "";
   if (pgStart && !S.stop) {
@@ -1263,7 +1479,8 @@ async function walk(opts = {}) {
 // ------------------------------------------------------------------ single parameter and kicks
 function updateInspector() {
   const sl = $("sel-slider");
-  if (S.sel < 0) { $("sel-name").textContent = "Click an edge, a unit or a point in the coefficient plot to pick one parameter."; $("sel-row").hidden = true; sl.disabled = true; return; }
+  const ix = $("sel-idx"); ix.max = S.net.P - 1; if (document.activeElement !== ix) ix.value = S.sel < 0 ? "" : S.sel;
+  if (S.sel < 0) { $("sel-name").textContent = "Click an edge, a unit or a point in the coefficient plot, or type a number, to pick one parameter."; $("sel-row").hidden = true; sl.disabled = true; return; }
   const v0 = S.theta0[S.sel], span = Math.max(0.5, 2.5 * Math.abs(v0));
   sl.disabled = S.walking; sl.min = v0 - span; sl.max = v0 + span; sl.step = span / 500; sl.value = S.theta[S.sel];
   $("sel-name").textContent = paramName(S.sel); $("sel-row").hidden = false;
@@ -1277,7 +1494,7 @@ function bind() {
     ro.addEventListener("click", show); ro.addEventListener("mouseenter", show);
   }
   for (const f of Object.keys(FAMS)) $("fam-" + f).onclick = () => setSystem(FAMS[f].keys[0]);
-  for (const v of ["f", "pe", "delta"]) $("v-" + v).onclick = () => { S.view = v; for (const u of ["f", "pe", "delta"]) $("v-" + u).setAttribute("aria-pressed", u === v); markDirty(); };
+  for (const v of ["f", "pe", "delta"]) $("v-" + v).onclick = () => { setView(v); if (S.key) writeHash(); };
   for (const m of ["weight", "sens", "c", "b"]) $("cm-" + m).onclick = () => { S.cmode = m; for (const u of ["weight", "sens", "c", "b"]) $("cm-" + u).setAttribute("aria-pressed", u === m); markDirty(true); };
   const pair = (a, b, set) => { $(a).onclick = () => { set(true); $(a).setAttribute("aria-pressed", true); $(b).setAttribute("aria-pressed", false); }; $(b).onclick = () => { set(false); $(b).setAttribute("aria-pressed", true); $(a).setAttribute("aria-pressed", false); }; };
   pair("w-c", "w-b", (x) => (S.which = x ? "c" : "b"));
@@ -1294,7 +1511,10 @@ function bind() {
     if (S.gauge !== g) setGauge(g);
     walk({ which: "b", mode: "resolved", free: "all", dt: 0.25, T: 12, until: 0.01, adaptive: true });
   };
-  $("w-stop").onclick = () => { S.stop = true; };
+  const stopWalk = () => { S.stop = true; if (S.walking && pending.size) restartWorker(); };
+  $("w-stop").onclick = stopWalk;
+  $("wb-stop").onclick = stopWalk;
+  $("wb-field").onclick = () => fieldCv.scrollIntoView({ behavior: scrollMode(), block: "center" });
   $("w-compare").onclick = async () => {
     if (S.walking) return;
     const which = S.which, back = () => { S.theta = S.theta0.slice(); S.version++; S.attrib = null; updateInspector(); markDirty(true); };
@@ -1305,6 +1525,33 @@ function bind() {
     S.hist = []; back();
     await walk({ which, mode: "resolved" });
   };
+  $("scrub").oninput = (e) => { stopReplay(); scrubTo(+e.target.value); };
+  $("scrub-play").onclick = playReplay;
+  const stage = $("field-stage");
+  if (document.fullscreenEnabled && stage.requestFullscreen) {
+    $("field-fs").hidden = false;
+    $("field-fs").onclick = () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else stage.requestFullscreen().catch(() => {}); };
+    document.addEventListener("fullscreenchange", () => { $("field-fs").textContent = document.fullscreenElement === stage ? "Exit full screen" : "Full screen"; markDirty(true); });
+  }
+  const prSvg = $("profile");
+  const profK = (e) => {
+    const g = S.profGeom, c = S.profCur; if (!g || !c) return null;
+    const b = prSvg.getBoundingClientRect(), u = (((e.clientX - b.left) / b.width) * g.W - g.l) / (g.W - g.l - g.r);
+    return u < -0.02 || u > 1.02 ? null : Math.max(0, Math.min(c.length - 1, Math.round(u * (c.length - 1))));
+  };
+  prSvg.addEventListener("pointermove", (e) => { const k = profK(e); if (k !== S.profHoverK) { S.profHoverK = k; drawProfile(S.profCur); } });
+  prSvg.addEventListener("pointerdown", (e) => { const k = profK(e); if (k !== S.profHoverK) { S.profHoverK = k; drawProfile(S.profCur); } });
+  prSvg.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && S.profHoverK != null) { S.profHoverK = null; drawProfile(S.profCur); } });
+  const trSvg = $("trace");
+  const traceK = (e) => {
+    const g = S.traceGeom; if (!g || S.traceKind === "plane" || S.walking || S.hist.length < 2 || !S.hist[0].th) return null;
+    const b = trSvg.getBoundingClientRect(), tv = (((e.clientX - b.left) / b.width) * g.W - g.l) / (g.W - g.l - g.r) * (g.tMax || 1);
+    let k = 0; S.hist.forEach((h, i) => { if (Math.abs(h.t - tv) < Math.abs(S.hist[k].t - tv)) k = i; });
+    return k;
+  };
+  trSvg.addEventListener("pointermove", (e) => { const k = traceK(e); trSvg.classList.toggle("pick", k != null); if (k !== S.traceHoverK) { S.traceHoverK = k; drawTrace(); } });
+  trSvg.addEventListener("pointerleave", () => { if (S.traceHoverK != null) { S.traceHoverK = null; drawTrace(); } });
+  trSvg.addEventListener("click", (e) => { const k = traceK(e); if (k != null) { stopReplay(); scrubTo(k); S.traceHoverK = k; } });
   $("w-clear").onclick = () => { S.runs = []; S.hist = []; markDirty(); };
   $("r0").oninput = (e) => { S.r0 = +e.target.value; $("r0-val").textContent = "r = " + S.r0.toFixed(2); S.hist = []; markDirty(); };
   $("alpha").oninput = (e) => { S.alpha = +e.target.value; $("alpha-val").textContent = S.alpha.toFixed(2).replace("-", "−"); computeBase(); changed(); };
@@ -1314,6 +1561,32 @@ function bind() {
   $("show-data").onchange = (e) => { S.data = e.target.checked; markDirty(); };
   try { const c = localStorage.getItem("sll-colour"); if (c && [...$("colour-style").options].some((o) => o.value === c)) { S.colour = c; $("colour-style").value = c; } } catch (e) {}
   $("colour-style").onchange = (e) => { S.colour = e.target.value; try { localStorage.setItem("sll-colour", S.colour); } catch (er) {} markDirty(); };
+  // light / dark switch, shown only on the public page (inside a host frame the host sets the theme)
+  let topLevel = false; try { topLevel = window.self === window.top; } catch (e) {}
+  if (topLevel) {
+    $("theme-box").hidden = false; $("kiosk-note").hidden = false;   // ?demo can only be added to the address of a top-level page
+    const TH = ["auto", "light", "dark"], showTh = (t) => TH.forEach((k) => $("th-" + k).setAttribute("aria-pressed", k === t));
+    showTh(document.documentElement.dataset.theme || "auto");
+    TH.forEach((k) => { $("th-" + k).onclick = () => {
+      if (k === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = k;
+      try { localStorage.setItem("sll-theme", k); } catch (e) {}
+      showTh(k);
+    }; });
+  }
+  // the public site keeps an offline copy (sw.js); never registered inside the claude.ai viewer or in local copies
+  try {
+    const pub = topLevel && "serviceWorker" in navigator && (location.hostname.endsWith(".github.io") || (location.hostname === "localhost" && /[?&]sw\b/.test(location.search)));
+    const reg = () => navigator.serviceWorker.register("sw.js").catch(() => {});
+    if (pub) { if (document.readyState === "complete") reg(); else window.addEventListener("load", reg); }
+  } catch (e) {}
+  $("save-png").onclick = saveFieldPNG;
+  $("demo-btn").onclick = () => { if (DEMO) stopDemo(); else if (performance.now() - demoStoppedAt > 600) playDemo(); };
+  // inside the claude.ai viewer files go through its downloads capability; elsewhere through a plain download link
+  if (!topLevel && typeof window.claude?.use === "function") {
+    $("save-png").disabled = true;
+    const off = () => { $("save-png").hidden = true; };
+    window.claude.use("downloads").then((d) => { DL = d; if (d) $("save-png").disabled = false; else off(); }, off);
+  }
   const coefDefault = $("coef-ro").textContent;
   coefCv.addEventListener("mousemove", (e) => {
     const bb = coefCv.getBoundingClientRect(), p = pickCoef(e.clientX - bb.left, e.clientY - bb.top);
@@ -1323,6 +1596,8 @@ function bind() {
   });
   coefCv.addEventListener("mouseleave", () => { S.coefHover = -1; $("coef-ro").textContent = coefDefault; drawCoef(); drawNet(); });
   coefCv.addEventListener("click", (e) => { const bb = coefCv.getBoundingClientRect(), p = pickCoef(e.clientX - bb.left, e.clientY - bb.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); drawCoef(); } });
+  $("sel-idx").oninput = (e) => { const i = +e.target.value; if (e.target.value !== "" && Number.isInteger(i) && i >= 0 && i < S.net.P && i !== S.sel) { S.sel = i; updateInspector(); drawNet(); drawCoef(); } };
+  $("sel-idx").onchange = () => updateInspector();   // tidy an out-of-range entry on leaving the box
   $("sel-slider").oninput = (e) => { if (S.sel < 0 || S.walking) return; S.theta[S.sel] = +e.target.value; $("sel-val").textContent = `${fmt(S.theta[S.sel])} (trained ${fmt(S.theta0[S.sel])})`; changed(); netDirtyOnly(); };
   // log-scale slider: 0.1% to 50% of ||theta||
   $("kick-size").oninput = (e) => { const v = 10 ** +e.target.value; $("kick-val").textContent = (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : v.toFixed(0)) + "%"; };
@@ -1335,16 +1610,27 @@ function bind() {
     updateInspector(); changed(); netDirtyOnly();
   };
   $("grp-zero").onclick = () => { const mask = groupMask(); if (!mask || S.walking) return; for (let i = 0; i < mask.length; i++) if (mask[i]) S.theta[i] = 0; updateInspector(); changed(); netDirtyOnly(); };
-  $("reset").onclick = () => { if (S.walking) return; S.theta = S.theta0.slice(); updateInspector(); changed(); netDirtyOnly(); };
+  $("reset").onclick = () => { if (S.walking) return; S.theta = S.theta0.slice(); status(""); updateInspector(); changed(); netDirtyOnly(); };
   netCv.addEventListener("mousemove", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p !== S.hover) { S.hover = p; netCv.title = p >= 0 ? `${paramName(p)} = ${fmt(S.theta[p])}` : ""; drawNet(); } });
   netCv.addEventListener("mouseleave", () => { S.hover = -1; drawNet(); });
   netCv.addEventListener("click", (e) => { const b = netCv.getBoundingClientRect(), p = pickParam(e.clientX - b.left, e.clientY - b.top); if (p >= 0) { S.sel = p; updateInspector(); drawNet(); drawCoef(); } });
-  fieldCv.addEventListener("mousemove", (e) => {
-    const b = fieldCv.getBoundingClientRect(), x = -E + (2 * E * (e.clientX - b.left)) / b.width, y = E - (2 * E * (e.clientY - b.top)) / b.height;
-    const v = S.sys.value(S.theta, x, y), m = S.lastDisplay ? S.lastDisplay.av.pg(x, y) : NaN, o = SYS[S.key].out, el = $("hover-ro");
+  // hover (or tap) for the values under the pointer; click to move the profile circle to that radius
+  const fieldXY = (e) => { const b = fieldCv.getBoundingClientRect(); return [-E + (2 * E * (e.clientX - b.left)) / b.width, E - (2 * E * (e.clientY - b.top)) / b.height]; };
+  const fieldRO = (e) => {
+    const [x, y] = fieldXY(e), v = S.sys.value(S.theta, x, y), m = S.lastDisplay ? S.lastDisplay.av.pg(x, y) : NaN, o = SYS[S.key].out, el = $("hover-ro");
     el.hidden = false; el.textContent = `(${fmt(x)}, ${fmt(y)})  ${o} ${fmt(v)}  P_ℰ ${o} ${fmt(m)}  δ ${fmt(v - m)}`;
+  };
+  let downAt = null;
+  fieldCv.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") fieldRO(e); });
+  fieldCv.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; fieldRO(e); });
+  fieldCv.addEventListener("pointerup", (e) => {
+    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+    downAt = null;
+    const [x, y] = fieldXY(e), r = Math.min(1, Math.max(0.1, Math.round(Math.hypot(x, y) * 100) / 100)), sl = $("r0");
+    if (+sl.value !== r) { sl.value = r; sl.dispatchEvent(new Event("input")); }
   });
-  fieldCv.addEventListener("mouseleave", () => { $("hover-ro").hidden = true; });
+  fieldCv.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") $("hover-ro").hidden = true; });
+  document.addEventListener("pointerdown", (e) => { if (e.target !== fieldCv) $("hover-ro").hidden = true; });
   window.addEventListener("resize", () => markDirty(true));
   window.addEventListener("hashchange", applyHash);
   const repal = () => { PAL = null; readPalette(); markDirty(true); };
@@ -1361,7 +1647,7 @@ const TRY = {
   c6_wedge360: "Pick <b>SO(2)</b>. The network is six-fold symmetric but not rotation-invariant, so restoring SO(2) has to change the function, not just tidy it.",
   spiral_wedge120: "Press <b>Restore symmetry</b> with C₃ and compare the accuracy on the whole disc. Then choose <b>C₆</b>: its average mixes the two classes.",
   spiral_wedge360: "Walk along <b>c*</b> to t = 1 (57°). Close to 60° the classes swap, so the accuracy falls while the defect hardly moves.",
-  twobody_arcs: "Press <b>Restore symmetry</b> and watch two readouts: the force error over the whole disc falls while the training loss rises. Then switch the trace to <b>training loss</b>.",
+  twobody_arcs: "Press <b>Restore symmetry</b> and watch two readouts: the force error over the whole disc falls while the training loss rises. Then switch the trace to <b>loss</b>.",
   annulus_eq: "Compare with the <b>90° wedge</b> network: the same data and loss, but the symmetry is built in, so the accuracy over all angles matches the training wedge. Walks have nothing to do: δ = η = 0.",
   c6_eq: "Pick <b>SO(2)</b>: the network is six-fold symmetric by construction but not rotation-invariant, so now δ and the lifts are non-zero.",
   spiral_eq: "Pick <b>C₆</b> or <b>SO(2)</b>: built-in C₃ symmetry leaves a non-zero defect for the larger groups, and the lifts work as usual.",
@@ -1387,13 +1673,13 @@ function summaryRow(k) {
     return { k, f, g, label: cfg.trained || cfg.label || (f === "mexican" ? "trajectories" : ""), eq: !!cfg.eq, loss: fin.loss, s1, s2, defect: fin.defect, hist };
   } finally { S.key = keep.key; S.net = keep.net; S.sys = keep.sys; S.theta = keep.theta; SCORE = keep.score; }
 }
-const rowHTML = (r) => `<td>${FAM_NAME[r.f]}${r.eq ? ' <small class="eqtag">equivariant net</small>' : ""}</td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.defect < 1e-9 ? "≈ 0" : fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td>${spark(r.hist)}</td>`;
+const rowHTML = (r) => `<td>${FAM_NAME[r.f]}${r.eq ? ' <small class="eqtag">equivariant net</small>' : ""}<small class="sum-on">${r.label}</small></td><td>${r.label}</td><td class="n">${fmt(r.loss)}</td><td class="n">${r.defect < 1e-9 ? "≈ 0" : fmt(r.defect)} <small>${gName(r.g)}</small></td><td class="n">${r.s2 || "–"}</td><td class="n">${r.s1}</td><td>${spark(r.hist)}</td>`;
 function buildSummary() {
   const body = $("summary").tBodies[0]; body.innerHTML = "";
   for (const f of Object.keys(FAMS)) for (const k of FAMS[f].keys) {
     const tr = body.insertRow(); tr.dataset.k = k; tr.dataset.f = f;
-    tr.innerHTML = `<td>${FAM_NAME[f]}${SYS[k].eq ? ' <small class="eqtag">equivariant net</small>' : ""}</td><td>${SYS[k].trained || SYS[k].label || ""}</td><td class="n hint" colspan="5">computing…</td>`;
-    tr.onclick = () => { if (S.walking) return; setSystem(k); window.scrollTo({ top: 0, behavior: "smooth" }); };
+    tr.innerHTML = `<td>${FAM_NAME[f]}${SYS[k].eq ? ' <small class="eqtag">equivariant net</small>' : ""}<small class="sum-on">${SYS[k].trained || SYS[k].label || ""}</small></td><td>${SYS[k].trained || SYS[k].label || ""}</td><td class="n hint" colspan="5">computing…</td>`;
+    tr.onclick = () => { if (S.walking) return; setSystem(k); window.scrollTo({ top: 0, behavior: scrollMode() }); };
   }
   markSummary();
 }
@@ -1421,14 +1707,100 @@ function markSummary() {
   fillSummary();
 }
 
+// ------------------------------------------------------------------ demo loop (for a screen at a poster)
+// Scripted scenes with captions; any pointer, wheel or key input stops it and leaves the page as it is.
+let DEMO = null, demoStoppedAt = 0;
+function stopDemo() {
+  if (!DEMO) return;
+  DEMO = null; demoStoppedAt = performance.now();
+  $("demo-cap").hidden = true; $("demo-btn").textContent = "Play demo"; document.body.classList.remove("demo"); keepAwake(false);
+  if (S.walking) $("w-stop").click();
+  for (const ev of ["pointerdown", "keydown", "wheel"]) document.removeEventListener(ev, demoInput, true);
+}
+// keep the screen awake while the demo runs (where the browser allows it); the lock lapses when the page is hidden
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (!on) { const l = wakeLock; wakeLock = null; if (l) await l.release(); return; }
+    if (wakeLock || !navigator.wakeLock || document.visibilityState !== "visible") return;
+    const l = await navigator.wakeLock.request("screen");
+    if (!DEMO) { l.release(); return; }   // stopped while asking
+    wakeLock = l; l.addEventListener("release", () => { if (wakeLock === l) wakeLock = null; });
+  } catch (e) { /* not allowed here: the demo runs anyway */ }
+}
+document.addEventListener("visibilitychange", () => { if (DEMO && document.visibilityState === "visible") keepAwake(true); });
+function demoInput(e) { if (!(e.target instanceof Element && e.target.closest("#field-fs"))) stopDemo(); }   // going full screen keeps it running
+async function playDemo() {
+  if (DEMO || S.walking) return;
+  const me = DEMO = {}, live = () => DEMO === me;
+  for (const ev of ["pointerdown", "keydown", "wheel"]) document.addEventListener(ev, demoInput, true);
+  $("demo-btn").textContent = "Demo running: touch to stop"; document.body.classList.add("demo"); keepAwake(true);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const say = async (html, ms) => { if (!live()) return; const el = $("demo-cap"); el.innerHTML = html; el.hidden = false; await wait(ms); };
+  const walked = async () => { while (live() && S.walking) await wait(150); await wait(400); };
+  const open = async (key, opts = {}) => {
+    if (!live()) return;
+    $("demo-cap").hidden = true;   // the last caption belongs to the last view
+    S.stage = "trained"; setSystem(key, false, true); if (opts.group !== undefined) setGroup(opts.group);
+    setView(opts.view || "f"); writeHash(); setTrace("defect"); $("w-b").click(); await wait(600);   // the walk panel shows the direction walked
+  };
+  const press = (id) => { if (live()) $(id).click(); };
+  fieldCv.scrollIntoView({ behavior: scrollMode(), block: "nearest" });
+  while (live()) {
+    await open("annulus_wedge90");
+    await say("<b>Annulus classifier</b>, trained on a 90° wedge: it fits every training point, but its output is far from rotation-invariant.", 5500);
+    await say("<b>Restore symmetry</b> walks the weights along b* = J⁺(−δ) until the equivariance defect is 1% of where it started.", 600);
+    press("w-restore"); await walked();
+    if (live()) setTrace("fit");
+    await say("The defect falls, and so does the accuracy: the symmetrised network P<sub>ℰ</sub>f puts every point in one class.", 6500);
+    await open("annulus_eq");
+    await say("The same MLP fed only x² + y², trained on the same wedge: the symmetry is built in, so it classifies every angle.", 6500);
+    await open("c6_wedge120", { view: "delta" });
+    await say("<b>Six-fold potential</b> learned from a 120° wedge. Shown: δ = V − P<sub>ℰ</sub>V, the part that breaks the C₆ symmetry.", 6000);
+    await open("c6_wedge120");
+    await say("Walking along c* = J⁺η rotates the learned function along its symmetry orbit: t = 1 is a rotation by 1 rad.", 600);
+    if (live()) { $("w-c").click(); walk({ which: "c", mode: "resolved", free: "all", T: 1, dt: 0.025 }); await walked(); }   // small steps: the field ends within ~3% of the rotated one
+    await wait(2500);
+    await open("twobody_arcs");
+    await say("<b>Two-body</b>: a potential learned from three half orbits. The training loss is small, but the learned force is not rotation-invariant.", 6500);
+    await open("twobody_orbits");
+    await say("Learned from 24 full orbits instead: about the same training loss, and a defect 200 times smaller.", 6500);
+  }
+}
+function setTrace(kind) { $("tr-" + kind).click(); }
+// Kiosk (the page opened with ?demo): the demo starts by itself and comes back after two minutes without input,
+// so a screen at a poster returns to it once a visitor walks away.
+function kiosk() {
+  const IDLE = 120000;
+  let last = performance.now();
+  for (const ev of ["pointerdown", "pointermove", "keydown", "wheel", "scroll"]) addEventListener(ev, () => { last = performance.now(); }, { capture: true, passive: true });
+  setTimeout(playDemo, 1500);
+  setInterval(() => { if (!DEMO && !S.walking && document.visibilityState === "visible" && performance.now() - last > IDLE) playDemo(); }, 5000);
+}
+
 // ------------------------------------------------------------------ boot
 (async function boot() {
   readPalette(); bind();
-  S.weights = await fetch("weights.json").then((r) => r.json());
-  worker = new Worker("worker.js");
-  worker.onmessage = (ev) => { const r = pending.get(ev.data.id); if (r) { pending.delete(ev.data.id); r(ev.data); } };
-  worker.postMessage({ cmd: "init", weights: S.weights });
+  status("Loading the trained networks…", true);
+  // say so in the field too, which is what a phone shows first
+  const fieldMsg = (msg) => {
+    const { w, dpr } = sizeCanvas(fieldCv), ctx = fieldCv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, w); ctx.fillStyle = PAL.muted; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = `14px ${cssVar("--f-body")}`; ctx.fillText(msg, w / 2, w / 2);
+  };
+  fieldMsg("Loading the trained networks…");
+  try {
+    S.weights = await fetch("weights.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  } catch (e) {
+    status("Could not load the trained networks (weights.json). Reload the page to try again.");
+    fieldMsg("Could not load the trained networks. Reload to try again.");
+    $("summary").tBodies[0].rows[0].cells[0].textContent = "–"; $("save-png").disabled = true;
+    return;
+  }
+  status("");
+  startWorker();
   if (!applyHash()) setSystem("annulus_wedge90", true);
+  if (/[?&]demo\b/.test(location.search)) kiosk();
   setTimeout(buildSummary, 50);
 })();
 </script>
